@@ -1,0 +1,21 @@
+version: 2
+
+sources:
+  - name: raw_banking
+    description: >
+      Raw Spanish banking tables loaded by
+      scripts/session-1-lakehouse/python/generate_and_load.py (synthetic data
+      modeled on the official Snowflake Quickstarts).
+    database: SUPERINTENDENCY_DEMO_DB
+    schema: STAGING_SCHEMA
+    config:
+      loaded_at_field: CARGADO_EN
+      freshness:
+        warn_after: {count: 7, period: day}
+    tables:
+      - name: CLIENTES
+        description: "Banking clients (was CUSTOMERS in the Quickstart). RUT = national ID."
+      - name: TARJETAS_CREDITO
+        description: "Credit cards (was CREDIT_CARDS). NUMERO_TARJETA = PAN."
+      - name: TRANSACCIONES
+        description: "Card transactions (was TRANSACTIONS). UNIDAD_NEGOCIO drives row-level security."

@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+*.tfplan
+tfplan
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Environment
+.env
+*.env.local
+
+# SB_Demo — cloned Quickstart repos (only README.md is tracked)
+Demo/SB_Demo/quickstarts/*/
+
+# SB_Demo — Session 1 generated synthetic CSVs (recreated by the loader script)
+Demo/SB_Demo/scripts/session-1-lakehouse/data/

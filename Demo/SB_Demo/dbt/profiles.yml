@@ -1,0 +1,22 @@
+# Guardrail (approved): dbt NEVER runs as ACCOUNTADMIN — role is pinned to
+# FR_DATA_ENGINEER. Connection settings come from the environment so no
+# credentials live in the repository.
+#
+# Required environment variables (set at user scope on the presenter machine):
+#   SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER, SNOWFLAKE_PRIVATE_KEY_PATH
+#
+# Run dbt from this directory with:  dbt <command> --profiles-dir .
+superintendency_demo:
+  target: dev
+  outputs:
+    dev:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('SNOWFLAKE_USER') }}"
+      authenticator: SNOWFLAKE_JWT
+      private_key_path: "{{ env_var('SNOWFLAKE_PRIVATE_KEY_PATH') }}"
+      role: FR_DATA_ENGINEER
+      database: SUPERINTENDENCY_DEMO_DB
+      schema: STAGING_SCHEMA
+      warehouse: WH_INGESTION_XSMALL
+      threads: 8

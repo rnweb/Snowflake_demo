@@ -1,0 +1,82 @@
+version: 2
+
+models:
+  - name: client_profile_dim
+    description: >
+      Client dimension (approved mart name). Enriches STAGING_SCHEMA.CLIENTES
+      with card and spend aggregates. RUT is the national ID masked by
+      MASK_NATIONAL_ID in the Session 3 governance demo.
+    columns:
+      - name: RUT
+        tests:
+          - unique
+          - not_null
+      - name: NOMBRE
+        tests:
+          - not_null
+      - name: ESTADO_CLIENTE
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['ACTIVO', 'SUSPENDIDO', 'BLOQUEADO']
+      - name: TOTAL_TARJETAS
+        tests:
+          - not_null
+      - name: MONTO_TOTAL_GASTADO
+        tests:
+          - not_null
+
+  - name: credit_card_transactions
+    description: >
+      Card transaction fact (approved mart name). Incremental on
+      FECHA_TRANSACCION. NUMERO_TARJETA is masked by MASK_CREDIT_CARD and
+      UNIDAD_NEGOCIO feeds RLS_BUSINESS_UNIT in Session 3.
+    columns:
+      - name: ID_TRANSACCION
+        tests:
+          - unique
+          - not_null
+      - name: RUT
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('client_profile_dim')
+                field: RUT
+      - name: NUMERO_TARJETA
+        tests:
+          - not_null
+      - name: FECHA_TRANSACCION
+        tests:
+          - not_null
+      - name: MONTO
+        tests:
+          - not_null
+      - name: CATEGORIA
+        tests:
+          - accepted_values:
+              arguments:
+                values:
+                  [
+                    'SUPERMERCADO',
+                    'RESTAURANTE',
+                    'FARMACIA',
+                    'BENCINA',
+                    'ROPA',
+                    'VIAJES',
+                    'ELECTRONICA',
+                    'EDUCACION',
+                    'SALUD',
+                    'ENTRETENIMIENTO',
+                  ]
+      - name: ESTADO
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['APROBADA', 'RECHAZADA', 'PENDIENTE']
+      - name: UNIDAD_NEGOCIO
+        description: "Row-level security attribute for RLS_BUSINESS_UNIT (Session 3)."
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['CORPORATIVO', 'RETAIL', 'PYME']

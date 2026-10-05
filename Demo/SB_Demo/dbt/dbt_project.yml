@@ -1,0 +1,36 @@
+# ============================================================================
+# Session 1 — dbt project: Superintendency of Banks demo
+# ============================================================================
+# Layers:
+#   STAGING_SCHEMA      views  (stg_*)   — light cleaning of raw Spanish tables
+#   CORE_BANKING_SCHEMA tables —         — approved mart names (CLIENT_PROFILE_DIM,
+#                                          CREDIT_CARD_TRANSACTIONS)
+# Role guardrail: role is pinned in profiles.yml (FR_DATA_ENGINEER).
+# ============================================================================
+
+name: superintendency_demo
+version: "1.0.0"
+config-version: 2
+profile: superintendency_demo
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+  - "logs"
+
+models:
+  superintendency_demo:
+    staging:
+      +materialized: view
+      +schema: STAGING_SCHEMA
+    core:
+      +materialized: table
+      +schema: CORE_BANKING_SCHEMA

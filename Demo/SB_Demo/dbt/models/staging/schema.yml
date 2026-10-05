@@ -1,0 +1,80 @@
+version: 2
+
+models:
+  - name: stg_clientes
+    description: "Cleaned view over STAGING_SCHEMA.CLIENTES."
+    columns:
+      - name: RUT
+        tests:
+          - unique
+          - not_null
+      - name: ESTADO
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['ACTIVO', 'SUSPENDIDO', 'BLOQUEADO']
+
+  - name: stg_tarjetas_credito
+    description: "Cleaned view over STAGING_SCHEMA.TARJETAS_CREDITO."
+    columns:
+      - name: ID_TARJETA
+        tests:
+          - unique
+          - not_null
+      - name: RUT
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_clientes')
+                field: RUT
+      - name: TIPO
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['ESTANDAR', 'ORO', 'PLATINO']
+      - name: ESTADO
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['ACTIVA', 'BLOQUEADA', 'VENCIDA']
+      - name: UNIDAD_NEGOCIO
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['CORPORATIVO', 'RETAIL', 'PYME']
+
+  - name: stg_transacciones
+    description: "Cleaned view over STAGING_SCHEMA.TRANSACCIONES."
+    columns:
+      - name: ID_TRANSACCION
+        tests:
+          - unique
+          - not_null
+      - name: RUT
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_clientes')
+                field: RUT
+      - name: ID_TARJETA
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_tarjetas_credito')
+                field: ID_TARJETA
+      - name: MONTO
+        tests:
+          - not_null
+      - name: ESTADO
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['APROBADA', 'RECHAZADA', 'PENDIENTE']
+      - name: UNIDAD_NEGOCIO
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['CORPORATIVO', 'RETAIL', 'PYME']
