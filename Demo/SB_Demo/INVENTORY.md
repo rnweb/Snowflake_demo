@@ -5,7 +5,8 @@ three sessions (infrastructure, data, AI and governance). Infrastructure is
 Terraform-managed (`terraform/`); data and logic live
 under `scripts/` and `dbt/`.
 
-Snapshot verified against the live account on **2026-09-29** (`SHOW` commands and
+Snapshot verified against the live account on **2026-09-29** and re-verified on
+**2026-10-07** after the security hardening below (`SHOW` commands and
 `COUNT(*)` per table — see [Verification](#verification)).
 
 ## Naming: raw tables vs dbt models
@@ -28,9 +29,9 @@ Snapshot verified against the live account on **2026-09-29** (`SHOW` commands an
 | Object | Provisioned by | Purpose |
 |--------|----------------|---------|
 | `SUPERINTENDENCY_DEMO_DB` | `main.tf` | Demo database (all data/AI/governance objects) |
-| `├── STAGING_SCHEMA` | `main.tf` | Raw Spanish landing tables + dbt staging views + file format/stages |
-| `├── CORE_BANKING_SCHEMA` | `main.tf` | dbt marts + Iceberg lakehouse table |
-| `├── RISK_ANALYTICS_SCHEMA` | `main.tf` | Snowflake Model Registry (`DETECTOR_FRAUDES`) |
+| `├── STAGING_SCHEMA` | `main.tf` | **Bronze** — raw ingestion layer and Iceberg external tables: Spanish landing tables + dbt staging views + file format/stages |
+| `├── CORE_BANKING_SCHEMA` | `main.tf` | **Silver/Gold** — curated dbt models, aggregated entities, and governed data (marts + Iceberg lakehouse table) |
+| `├── RISK_ANALYTICS_SCHEMA` | `main.tf` | Data Science workspaces and Snowpark ML models (Model Registry: `DETECTOR_FRAUDES`) |
 | `├── GOVERNANCE_SCHEMA` | `main.tf` | Masking/RLS policies, tag, `ROLE_MAPPING` |
 | `CORTEX_NATIVE_APP_DB` | `main.tf` | Native App / Streamlit staging area |
 | `└── PUBLIC` | built-in | `STREAMLIT_STAGE` (app source files) |
@@ -57,7 +58,9 @@ FR_TERRAFORM                 # separate IaC-only role (no demo-hierarchy grants)
 
 - **Terraform-managed grants** (`security.tf`): engineer build privileges on
   staging/core/analytics (incl. `CREATE ICEBERG TABLE`, `CREATE MODEL`),
-  analyst read-only `SELECT` on staging/core/analytics, warehouse `USAGE`,
+  analyst read-only `SELECT` on core/analytics plus `USAGE` on
+  `CORTEX_NATIVE_APP_DB` — **no staging access** (revoked 2026-10-07, see
+  [scope notes](#scope-notes)) —, warehouse `USAGE`,
   admin policy authoring (`CREATE MASKING POLICY`/`ROW ACCESS POLICY`/`TAG` on
   `GOVERNANCE_SCHEMA`), `MODIFY` + `SELECT` on core, DML on governance tables.
 - **Manual bootstrap (not in Terraform, documented in `phase3-next-steps.md`):**
@@ -93,8 +96,10 @@ FR_TERRAFORM                 # separate IaC-only role (no demo-hierarchy grants)
 - Iceberg table: managed Snowflake storage (`CATALOG='SNOWFLAKE'`), loaded from
   Parquet on `ICEBERG_DEMO_STAGE` (3 files, 518 744 bytes); row parity with the
   raw mart verified (`is_iceberg='Y'`).
-- No masking or RLS policies are attached to this layer (see
-  [scope note](#scope-notes)).
+- No masking or RLS policies are attached to this layer — and since the
+  2026-10-07 hardening `FR_BI_ANALYST` has **no access here at all**
+  ([scope notes](#scope-notes)); raw tables are reachable by
+  `FR_DEMO_ADMIN`/`FR_DATA_ENGINEER` only.
 
 ---
 
@@ -118,6 +123,7 @@ Mart facts: `UNIDAD_NEGOCIO` = PYME 6 223 / CORPORATIVO 5 928 / RETAIL 5 849;
 | **Model** `SUPERINTENDENCY_DEMO_DB.RISK_ANALYTICS_SCHEMA.DETECTOR_FRAUDES` (V1) | RandomForest fraud detector, trained by `session-2/python/01_train_fraud_model.py` on the mart; features `MONTO, HORA, DIA_SEMANA, FIN_DE_SEMANA, CATEGORIA_ALTO_RIESGO, UNIDAD_NEGOCIO_COD`; ACCURACY 0.931 / RECALL 0.440 / PRECISION 0.761; callable from SQL via `MODEL(…DETECTOR_FRAUDES, V1)!predict(…)` |
 | **Cortex AI** (4 statements, `session-2/sql/02_cortex_ai_features.sql`) | `SNOWFLAKE.CORTEX.SUMMARIZE`, `SNOWFLAKE.CORTEX.TRANSLATE`, `SNOWFLAKE.CORTEX.COMPLETE('llama3.1-70b', …)`, `SNOWFLAKE.CORTEX.COMPLETE('llama3.1-8b', …)` — Spanish prompts. **Trial account gate `399258`**: statements compile and resolve but return "not available for trial accounts" until run on a standard account |
 | **Streamlit** `PANEL_PREVENCION_FRAUDE` | Source: `session-2/streamlit_app.py` (Spanish UI: KPIs, charts, model-inference form, Cortex text box). Stage `STREAMLIT_STAGE` is provisioned; **the app is intentionally not deployed by automation** (human-approved manual `CREATE STREAMLIT` — currently not deployed) |
+| **MCP server** (C06-PRE-06 & C06-AE-08) | `session-2/python/mcp_server.py` — stdio Model Context Protocol server exposing `query_customer_transactions(rut)` over `CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS`; credentials/role from env vars (`SNOWFLAKE_ROLE` default `FR_BI_ANALYST`), each call runs `USE SECONDARY ROLES NONE`; masking + RLS proven with Claude Desktop (see session-2 README) |
 
 ---
 
@@ -148,14 +154,29 @@ needs **no** governance grants of its own.
 
 ### Scope notes
 
-- Masking is attached to the **two core-mart columns only**. Raw tables
-  (`STAGING_SCHEMA.CLIENTES.RUT`, …) carry no policies; `FR_BI_ANALYST` holds
-  `SELECT` there for lineage demos and would see raw values. If a stricter
-  story is needed for the presentation, attach the same policies to the raw
-  columns (or revoke analyst staging `SELECT`).
-- `terraform/main.tf` schema *comments* predate the final layer split (the
-  `CORE_BANKING_SCHEMA` comment still says "Raw ingestion layer"); object
-  placement in this inventory reflects the verified live state.
+- **Gap closed (2026-10-07).** Raw tables (`STAGING_SCHEMA.CLIENTES.RUT`, …)
+  carry no masking policies, and `FR_BI_ANALYST` used to hold `SELECT` there —
+  which would have bypassed the Dynamic Data Masking narrative. Terraform
+  (`security.tf`) now **revokes** the analyst's `USAGE`/`SELECT` on
+  `STAGING_SCHEMA` (resources `analyst_staging_read`,
+  `analyst_staging_select_all`, `analyst_staging_select_future` removed);
+  verified live: `SHOW GRANTS TO ROLE FR_BI_ANALYST` returns **no STAGING
+  entries**. The analyst reads `CORE_BANKING_SCHEMA`, `RISK_ANALYTICS_SCHEMA`
+  and `CORTEX_NATIVE_APP_DB` only; masking stays attached to the two core-mart
+  columns.
+- **Session isolation (2026-10-07).** The revocation alone was not enough: the
+  operator user `OPERATIONS` also holds `FR_DEMO_ADMIN`/`FR_TERRAFORM`, and
+  Snowflake activates every role of a user as a *secondary* role by default —
+  so an `FR_BI_ANALYST` session still inherited `FR_DATA_ENGINEER`'s staging
+  privileges through the hierarchy. Persona sessions now run
+  `USE SECONDARY ROLES NONE` (`scripts/session-3-governance/sql/02_verify_masking_rls.sql`,
+  `scripts/session-2-analytics-ai/python/mcp_server.py`); verified live:
+  `SELECT COUNT(*) …STAGING_SCHEMA.CLIENTES` **fails with `002003`** for the
+  isolated analyst session while the core mart stays readable (5 849 RETAIL
+  rows).
+- Schema `COMMENT`s follow the Medallion wording in `terraform/main.tf`
+  (Bronze / Silver-Gold / Data Science) and were applied to the live schemas
+  on 2026-10-07.
 
 ## Verification
 
@@ -167,8 +188,16 @@ SHOW MASKING POLICIES IN DATABASE SUPERINTENDENCY_DEMO_DB;
 SHOW ROW ACCESS POLICIES IN DATABASE SUPERINTENDENCY_DEMO_DB;
 SHOW TAGS IN DATABASE SUPERINTENDENCY_DEMO_DB;
 SHOW MODELS IN SCHEMA SUPERINTENDENCY_DEMO_DB.RISK_ANALYTICS_SCHEMA;
+SHOW GRANTS TO ROLE FR_BI_ANALYST;  -- must contain no STAGING_SCHEMA entries
 SELECT COUNT(*) FROM SUPERINTENDENCY_DEMO_DB.STAGING_SCHEMA.TRANSACCIONES;      -- 18000
 SELECT COUNT(*) FROM SUPERINTENDENCY_DEMO_DB.CORE_BANKING_SCHEMA.CLIENT_PROFILE_DIM; -- 600
+```
+
+Persona isolation check (as `FR_BI_ANALYST`):
+
+```sql
+USE SECONDARY ROLES NONE;                                                  -- see scope notes
+SELECT COUNT(*) FROM SUPERINTENDENCY_DEMO_DB.STAGING_SCHEMA.CLIENTES;      -- must FAIL: 002003
 ```
 
 Persona proofs live in `scripts/session-3-governance/sql/02_verify_masking_rls.sql`.

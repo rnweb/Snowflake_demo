@@ -75,7 +75,12 @@ but the final `ALTER` errors if the policy is already attached (ignore it).
 snowsql -f scripts/session-3-governance/sql/02_verify_masking_rls.sql
 ```
 
-Run the **whole file in one session** — it switches roles mid-way.
+Run the **whole file in one session** — it switches roles mid-way. Every
+persona section starts with `USE SECONDARY ROLES NONE`: the operator user also
+holds `FR_DEMO_ADMIN`/`FR_TERRAFORM`, and Snowflake keeps all of a user's roles
+active as *secondary* roles by default — without the isolation, an analyst
+session would inherit `FR_DATA_ENGINEER`'s raw-layer privileges even though
+`FR_BI_ANALYST` itself holds no staging grants.
 
 | Check | `FR_DEMO_ADMIN` | `FR_BI_ANALYST` |
 |-------|-----------------|-----------------|

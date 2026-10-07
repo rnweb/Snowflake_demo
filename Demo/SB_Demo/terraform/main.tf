@@ -20,19 +20,19 @@ resource "snowflake_database" "native_app" {
 resource "snowflake_schema" "core" {
   database = snowflake_database.demo.name
   name     = var.schema_core
-  comment  = "Raw ingestion layer for transactional data."
+  comment  = "Curated dbt models, aggregated entities, and governed data (Silver/Gold)"
 }
 
 resource "snowflake_schema" "analytics" {
   database = snowflake_database.demo.name
   name     = var.schema_analytics
-  comment  = "Transformed layer for BI, RLS, and Cortex."
+  comment  = "Data Science workspaces and Snowpark ML models"
 }
 
 resource "snowflake_schema" "staging" {
   database = snowflake_database.demo.name
   name     = var.schema_staging
-  comment  = "dbt intermediate layer."
+  comment  = "Raw ingestion layer and Iceberg external tables (Bronze)"
 }
 
 resource "snowflake_schema" "governance" {

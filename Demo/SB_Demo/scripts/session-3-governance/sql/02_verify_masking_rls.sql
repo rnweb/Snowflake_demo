@@ -4,6 +4,12 @@
 -- Start as FR_DEMO_ADMIN on WH_APP_XSMALL. The script switches roles mid-way,
 -- so run the whole file in one worksheet / one session.
 --
+-- Persona isolation: every statement below runs after USE SECONDARY ROLES NONE
+-- because the operator user also holds FR_DEMO_ADMIN + FR_TERRAFORM and
+-- Snowflake keeps all of a user's roles active as secondary roles by default.
+-- Without the isolation the analyst section would silently inherit
+-- FR_DATA_ENGINEER's raw-layer privileges (STAGING_SCHEMA).
+--
 -- Expected results:
 --   FR_DEMO_ADMIN  -> RUT y NUMERO_TARJETA en claro, 3 unidades, 18 000 filas
 --   FR_BI_ANALYST  -> RUT '***-**-****', tarjeta '****-****-****-****',
@@ -13,6 +19,8 @@
 -- -----------------------------------------------------------------------------
 -- A. FR_DEMO_ADMIN — plaintext PII, all business units
 -- -----------------------------------------------------------------------------
+USE SECONDARY ROLES NONE;  -- isolate: only FR_DEMO_ADMIN is effective
+
 SELECT RUT, NOMBRE, APELLIDO, ESTADO_CLIENTE
 FROM SUPERINTENDENCY_DEMO_DB.CORE_BANKING_SCHEMA.CLIENT_PROFILE_DIM
 ORDER BY RUT
@@ -36,6 +44,7 @@ ORDER BY ROLE_NAME, BUSINESS_UNIT;
 -- B. FR_BI_ANALYST — same queries, masked + RETAIL-only (zero app changes)
 -- -----------------------------------------------------------------------------
 USE ROLE FR_BI_ANALYST;
+USE SECONDARY ROLES NONE;  -- isolate: only FR_BI_ANALYST is effective
 USE WAREHOUSE WH_APP_XSMALL;
 USE DATABASE SUPERINTENDENCY_DEMO_DB;
 USE SCHEMA CORE_BANKING_SCHEMA;

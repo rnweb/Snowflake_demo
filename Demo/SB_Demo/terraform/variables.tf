@@ -24,17 +24,17 @@ variable "native_app_db_name" {
 # ---------------------------------------------------------------------------
 variable "schema_core" {
   type        = string
-  description = "Raw ingestion layer for transactional data."
+  description = "Curated dbt models, aggregated entities, and governed data (Silver/Gold)"
 }
 
 variable "schema_analytics" {
   type        = string
-  description = "Transformed layer for BI, RLS, and Cortex."
+  description = "Data Science workspaces and Snowpark ML models"
 }
 
 variable "schema_staging" {
   type        = string
-  description = "dbt intermediate layer."
+  description = "Raw ingestion layer and Iceberg external tables (Bronze)"
 }
 
 variable "schema_governance" {

@@ -322,33 +322,27 @@ resource "snowflake_grant_privileges_to_account_role" "analyst_core_select_futur
   }
 }
 
-resource "snowflake_grant_privileges_to_account_role" "analyst_staging_read" {
+# Security hardening (evaluation 20260801) — FR_BI_ANALYST no longer touches
+# the raw layer: USAGE + SELECT on STAGING_SCHEMA were REVOKED by removing the
+# three resources that used to live here (analyst_staging_read,
+# analyst_staging_select_all, analyst_staging_select_future). Raw tables such
+# as STAGING_SCHEMA.CLIENTES carried no masking policies, so they let the
+# analyst bypass the Dynamic Data Masking narrative. The analyst now reads
+# CORE_BANKING_SCHEMA, RISK_ANALYTICS_SCHEMA and CORTEX_NATIVE_APP_DB only.
+resource "snowflake_grant_privileges_to_account_role" "analyst_native_app_usage" {
+  account_role_name = snowflake_account_role.analyst.name
+  privileges        = ["USAGE"]
+  on_account_object {
+    object_type = "DATABASE"
+    object_name = snowflake_database.native_app.name
+  }
+}
+
+resource "snowflake_grant_privileges_to_account_role" "analyst_native_app_schema" {
   account_role_name = snowflake_account_role.analyst.name
   privileges        = ["USAGE"]
   on_schema {
-    schema_name = snowflake_schema.staging.fully_qualified_name
-  }
-}
-
-resource "snowflake_grant_privileges_to_account_role" "analyst_staging_select_all" {
-  account_role_name = snowflake_account_role.analyst.name
-  privileges        = ["SELECT"]
-  on_schema_object {
-    all {
-      in_schema          = snowflake_schema.staging.fully_qualified_name
-      object_type_plural = "TABLES"
-    }
-  }
-}
-
-resource "snowflake_grant_privileges_to_account_role" "analyst_staging_select_future" {
-  account_role_name = snowflake_account_role.analyst.name
-  privileges        = ["SELECT"]
-  on_schema_object {
-    future {
-      in_schema          = snowflake_schema.staging.fully_qualified_name
-      object_type_plural = "TABLES"
-    }
+    schema_name = "${snowflake_database.native_app.name}.PUBLIC"
   }
 }
 
