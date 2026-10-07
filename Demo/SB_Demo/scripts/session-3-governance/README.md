@@ -50,7 +50,7 @@ complement — all discoverable in Snowsight.
 ## Step 1 — Seed + RLS binding
 
 ```bash
-snowsql -f scripts/session-3-governance/sql/01_seed_role_mapping.sql
+snowsql -f Demo/SB_Demo/scripts/session-3-governance/sql/01_seed_role_mapping.sql
 # ...or paste into a Snowsight worksheet
 ```
 
@@ -66,13 +66,14 @@ SELECT  -> FR_BI_ANALYST    | RETAIL
 ALTER   -> Statement executed successfully.
 ```
 
-The binding in step 3 is **one-shot**: re-running the file re-seeds cleanly,
-but the final `ALTER` errors if the policy is already attached (ignore it).
+The RLS binding at the end of this file is **one-shot**: re-running the file
+re-seeds cleanly, but the final `ALTER` errors if the policy is already
+attached (ignore it).
 
 ## Step 2 — Verify masking + row-level security
 
 ```bash
-snowsql -f scripts/session-3-governance/sql/02_verify_masking_rls.sql
+snowsql -f Demo/SB_Demo/scripts/session-3-governance/sql/02_verify_masking_rls.sql
 ```
 
 Run the **whole file in one session** — it switches roles mid-way. Every
@@ -92,7 +93,7 @@ session would inherit `FR_DATA_ENGINEER`'s raw-layer privileges even though
 ## Step 3 — Horizon object tagging
 
 ```bash
-snowsql -f scripts/session-3-governance/sql/03_object_tagging_demo.sql
+snowsql -f Demo/SB_Demo/scripts/session-3-governance/sql/03_object_tagging_demo.sql
 ```
 
 Expected output:

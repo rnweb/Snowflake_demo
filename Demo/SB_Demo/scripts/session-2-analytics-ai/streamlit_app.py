@@ -16,7 +16,7 @@ rol de despliegue si el cambio no está permitido.
 
 IMPORTANTE (guardrail): esta app NO se despliega desde la automatización.
 Requiere revisión humana y aprobación explícita antes del CREATE STREAMLIT
-(ver scripts/session-2-analytics-ai/README.md).
+(ver Demo/SB_Demo/scripts/session-2-analytics-ai/README.md).
 """
 
 import json

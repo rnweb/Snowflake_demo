@@ -14,7 +14,7 @@ target ES_FRAUDE is a documented *proxy label* derived from business rules
 (declined/high-value + suspicious category combinations).
 
 Usage (from the repository root, Python 3.12 venv):
-    .venv/Scripts/python scripts/session-2-analytics-ai/python/01_train_fraud_model.py
+    .venv/Scripts/python Demo/SB_Demo/scripts/session-2-analytics-ai/python/01_train_fraud_model.py
 """
 
 import os

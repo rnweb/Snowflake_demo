@@ -7,7 +7,7 @@ ingestion** and **tested, reproducible transformations**.
 
 1. Synthetic banking data (modeled on the official Snowflake Quickstarts)
    loaded into `SUPERINTENDENCY_DEMO_DB.STAGING_SCHEMA`
-2. dbt project: staging views → core marts, with 37 data-quality tests
+2. dbt project: staging views → core marts, with 36 data-quality tests
    (`unique`, `not_null`, `accepted_values`, `relationships`, one singular test)
 
 ## Naming mapping (Quickstart → banking persona)
@@ -44,7 +44,7 @@ Core marts keep the **approved** mart names consumed by the governance layer:
 From the repository root:
 
 ```bash
-python scripts/session-1-lakehouse/python/generate_and_load.py
+python Demo/SB_Demo/scripts/session-1-lakehouse/python/generate_and_load.py
 ```
 
 The script (deterministic seed 42) generates the CSVs, runs
@@ -83,13 +83,13 @@ dbt source freshness --profiles-dir .  # 3/3 sources fresh
 - Core layer (`CORE_BANKING_SCHEMA`): `client_profile_dim` (table),
   `credit_card_transactions` (incremental on `FECHA_TRANSACCION`)
 
-Expected result: **`PASS=41 WARN=0 ERROR=0`** (3 views + 2 marts + 37 tests) and
+Expected result: **`PASS=41 WARN=0 ERROR=0`** (3 views + 2 marts + 36 tests) and
 **`3/3 sources fresh`**.
 
 ## Step 3 — Apache Iceberg lakehouse proof (open formats)
 
 ```bash
-snowsql -f scripts/session-1-lakehouse/sql/03_iceberg_lakehouse_demo.sql
+snowsql -f Demo/SB_Demo/scripts/session-1-lakehouse/sql/03_iceberg_lakehouse_demo.sql
 # ...or paste the file into a Snowsight worksheet
 ```
 

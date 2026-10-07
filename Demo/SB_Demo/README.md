@@ -12,7 +12,7 @@ data assets, AI models, governance policies) lives in
 | Session | Theme | Assets |
 |---------|-------|--------|
 | 1 | Lakehouse & Data Engineering | Snowpipe, external stages, dbt project (`dbt build`) |
-| 2 | AI & Analytics | Snowpark ML, Cortex RAG, Streamlit in Snowflake |
+| 2 | AI & Analytics | Snowpark ML (fraud model), Cortex AI (ES), Streamlit, MCP server |
 | 3 | Governance & Security | Dynamic Data Masking, Row-Level Security, access grants |
 
 ## Separation of Concerns
@@ -20,7 +20,7 @@ data assets, AI models, governance policies) lives in
 | Layer | Tool | Contents |
 |-------|------|----------|
 | **Infrastructure** | Terraform | Databases, schemas, warehouses, roles, RBAC grants, stages, masking/RLS policies |
-| **Data & Logic** | Scripts | Data loading, dbt models, Snowpark ML, Streamlit / Native App code |
+| **Data & Logic** | Scripts | Data loading, dbt models, Snowpark ML, Streamlit / Native App / MCP server code |
 
 ## Repository Structure
 
@@ -51,7 +51,7 @@ SB_Demo/
 │   └── governance.tf              # Masking policies, RLS policy + mapping table
 └── scripts/                       # Data & logic (never infrastructure)
     ├── session-1-lakehouse/       # Spanish raw DDL, synthetic loader, presenter README
-    ├── session-2-analytics-ai/     # Snowpark ML, Cortex AI, Streamlit app
+    ├── session-2-analytics-ai/     # Snowpark ML, Cortex AI, Streamlit app, MCP server
     └── session-3-governance/      # Policy binding, mapping-table data, validation
 ```
 
@@ -84,7 +84,7 @@ Use the prompts in [prompts/](prompts/) in sequence to drive the agent through t
 - Snowflake account (Enterprise/Business Critical) with a dedicated service user
 - **Terraform CLI >= 1.5** with `SNOWFLAKE_*` environment variables configured
 - Snowflake CLI (`snow`) / `snowsql` for script execution
-- Python 3.9+ with `snowflake-snowpark-python`, `snowflake-ml-python`, `streamlit`, `dbt-snowflake`
+- Python 3.12 virtualenv with `snowflake-snowpark-python`, `snowflake-ml-python`, `streamlit`, `dbt-snowflake`, `mcp`
 - Git
 
 !!! warning "Security Guardrails"

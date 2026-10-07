@@ -7,7 +7,7 @@ internal stage and runs COPY INTO the STAGING_SCHEMA raw tables.
 Role: FR_DATA_ENGINEER | Warehouse: WH_INGESTION_XSMALL
 
 Usage (from the repository root):
-    python scripts/session-1-lakehouse/python/generate_and_load.py
+    python Demo/SB_Demo/scripts/session-1-lakehouse/python/generate_and_load.py
 """
 
 import csv

@@ -1,7 +1,7 @@
 # Phase 3 — Next Steps: Data, Logic & App Delivery
 
 > **Status:** Phase 2 (Terraform IaC) is **complete** — `terraform plan` reports
-> *"No changes. Your infrastructure matches the configuration."* (43 resources).
+> *"No changes. Your infrastructure matches the configuration."* (55 resources).
 
 Phase 3 delivers everything Terraform deliberately does **not** manage: data,
 transformation logic and application code. Per the separation of concerns, these
@@ -19,7 +19,7 @@ live in `scripts/session-*` and are executed with the demo roles — never as
 | Warehouses | `WH_INGESTION_XSMALL`, `WH_CORTEX_LARGE`, `WH_APP_XSMALL` |
 | Roles | `FR_DEMO_ADMIN` → (`FR_DATA_ENGINEER`, `FR_BI_ANALYST`) |
 | Governance | `MASK_NATIONAL_ID`, `MASK_CREDIT_CARD`, `RLS_BUSINESS_UNIT`, `ROLE_MAPPING` table (empty) |
-| RBAC | 25 least-privilege grants (engineer builds, analyst reads, admin orchestrates) |
+| RBAC | 36 grant resources — 33 least-privilege grants + 3 role-hierarchy links (engineer builds, analyst reads, admin orchestrates) |
 
 **Manual bootstrap (already executed as ACCOUNTADMIN — re-run only on a fresh account):**
 
@@ -36,7 +36,7 @@ GRANT APPLY ROW ACCESS POLICY ON ACCOUNT TO ROLE FR_DEMO_ADMIN;
 1. **Raw load (Spanish banking schema)** — from the repo root:
 
    ```bash
-   python scripts/session-1-lakehouse/python/generate_and_load.py
+   python Demo/SB_Demo/scripts/session-1-lakehouse/python/generate_and_load.py
    ```
 
    Generates synthetic data (seed 42), creates `CLIENTES` /
@@ -59,16 +59,38 @@ GRANT APPLY ROW ACCESS POLICY ON ACCOUNT TO ROLE FR_DEMO_ADMIN;
 
 ## 2. Session 2 — Snowpark, Cortex & Streamlit (`scripts/session-2-analytics-ai/`)
 
-1. **Snowpark Python** feature engineering as `FR_DATA_ENGINEER` on
-   `WH_CORTEX_LARGE` (forecasting / anomaly features into `RISK_ANALYTICS_SCHEMA`).
-2. **Cortex Analyst / Copilot** demos — `WH_CORTEX_LARGE`, semantic model in
-   `RISK_ANALYTICS_SCHEMA`.
-3. **Native App** — package/source lives in `CORTEX_NATIVE_APP_DB`
-   (separate database on purpose; app installs are not Terraform-managed).
-4. **Streamlit** — app code deploys with `WH_APP_XSMALL`; run as
-   `FR_DEMO_ADMIN` (or a dedicated streamlit service role later).
-5. **Quickstarts:** `quickstarts/sfguide-getting-started-dataengineering-ml-snowpark-python`,
-   `quickstarts/sfguide-build-chatbot-with-snowflake-native-app-snowflake-cortex`.
+1. **Snowpark ML** — `python/01_train_fraud_model.py` as `FR_DATA_ENGINEER` on
+   `WH_CORTEX_LARGE`: feature SQL over the dbt mart, RandomForest training,
+   evaluation and registration of `RISK_ANALYTICS_SCHEMA.DETECTOR_FRAUDES`
+   (V1), callable from SQL.
+2. **Cortex AI (español)** — `sql/02_cortex_ai_features.sql`, four statements
+   (`CORTEX.SUMMARIZE`, `CORTEX.TRANSLATE`, `CORTEX.COMPLETE` ×2) as
+   `FR_DATA_ENGINEER` on `WH_CORTEX_LARGE`; trial accounts stop at the
+   documented licence gate `399258`.
+3. **MCP server — required for the evaluators** — initialize before the demo:
+
+   ```bash
+   python -m pip install mcp
+   python Demo/SB_Demo/scripts/session-2-analytics-ai/python/mcp_server.py
+   ```
+
+   The stdio server exposes `query_customer_transactions(rut)` over the Model
+   Context Protocol so an external AI client (e.g. Claude Desktop) queries the
+   lakehouse through the governed role (`FR_BI_ANALYST` by default; every
+   session runs `USE SECONDARY ROLES NONE`). **This step is required to
+   demonstrate external AI integration and to verify the row-level security /
+   dynamic data masking isolation for the evaluators**: masked card numbers,
+   RETAIL-only rows, `002003` on the raw layer. Full setup and presenter demo
+   script: `scripts/session-2-analytics-ai/README.md` (Step 4).
+4. **Streamlit** — `streamlit_app.py` deploys to `CORTEX_NATIVE_APP_DB.PUBLIC`
+   with `WH_APP_XSMALL`; run the `PUT` + `CREATE STREAMLIT` as
+   `FR_DATA_ENGINEER` **only after explicit human approval** (never automated).
+5. **Native App** — target database `CORTEX_NATIVE_APP_DB` (separate database
+   on purpose; app installs are not Terraform-managed).
+6. **Quickstarts:** `quickstarts/dataengineering-ml-snowpark`
+   (`sfguide-getting-started-dataengineering-ml-snowpark-python`),
+   `quickstarts/cortex-native-app-chatbot`
+   (`sfguide-build-chatbot-with-snowflake-native-app-snowflake-cortex`).
 
 ## 3. Session 3 — Governance Activation (`scripts/session-3-governance/`)
 
@@ -88,9 +110,12 @@ Executed **after** `CLIENT_PROFILE_DIM` and `CREDIT_CARD_TRANSACTIONS` exist
       ON (UNIDAD_NEGOCIO);
    ```
 
-4. **Verify:** query as `FR_BI_ANALYST` (masked PII + filtered rows) vs
-   `FR_DEMO_ADMIN` (plaintext). Quickstart:
-   `quickstarts/sfguide-getting-started-with-horizon-data-governance-in-snowflake`.
+4. **Verify:** run `scripts/session-3-governance/sql/02_verify_masking_rls.sql`
+   — every persona section starts with `USE SECONDARY ROLES NONE` so only the
+   role under test is effective — and compare `FR_BI_ANALYST` (masked PII +
+   filtered rows) vs `FR_DEMO_ADMIN` (plaintext). Quickstart:
+   `quickstarts/horizon-data-governance`
+   (`sfguide-getting-started-with-horizon-data-governance-in-snowflake`).
 
 ---
 
