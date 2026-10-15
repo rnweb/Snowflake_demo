@@ -44,6 +44,8 @@ SB_Demo/
 │   └── README.md
 ├── terraform/                     # Enterprise-grade IaC (source of truth for infra)
 │   ├── providers.tf               # Snowflake provider + auth via SNOWFLAKE_* env vars
+│   ├── backend.tf                 # Portable state: local by default, remote (S3/R2) optional
+│   ├── backend.hcl.example        # Template for remote state (copy → backend.hcl, gitignored)
 │   ├── variables.tf               # All object-name variables
 │   ├── terraform.tfvars           # Approved banking target values
 │   ├── main.tf                    # Databases, schemas, warehouses
@@ -69,8 +71,15 @@ SB_Demo/
 
    Authentication via standard `SNOWFLAKE_*` environment variables — no credentials
    in files.
+
+   **State:** `backend.tf` defaults to local state (zero config, gitignored) —
+   `terraform init` just works. For team/remote state, copy
+   `terraform/backend.hcl.example` → `backend.hcl` (gitignored), fill the
+   bucket/key/region (AWS S3, Cloudflare R2 or MinIO-compatible), then
+   `terraform init -backend-config=backend.hcl -reconfigure -migrate-state`.
 3. **Data & Logic Deployment** — run the scripts of each session in order
-   (1 → 2 → 3), reviewing generated code before any Streamlit/Cortex/Native App deploy.
+   (1 → 2 → 3), reviewing generated code before any Streamlit/Cortex/Native App deploy
+   (Streamlit: `session-2-analytics-ai/sql/04_deploy_streamlit.sql`, human-gated).
    After the Session 1 data load, set `attach_policies_to_tables = true` in
    `terraform.tfvars` and re-run `terraform apply` to bind masking policies (Session 3).
 4. **Validation & Teardown** — run validation queries (row counts, masking assertions,
@@ -86,6 +95,23 @@ Use the prompts in [prompts/](prompts/) in sequence to drive the agent through t
 - Snowflake CLI (`snow`) / `snowsql` for script execution
 - Python 3.12 virtualenv with `snowflake-snowpark-python`, `snowflake-ml-python`, `streamlit`, `dbt-snowflake`, `mcp`
 - Git
+
+### Environment variables for the Python scripts
+
+Every script reads **only** from the environment and fails fast if a required
+variable is missing — no accounts, users or key paths are hardcoded anywhere
+in `scripts/`:
+
+| Variable | Required | Notes |
+|----------|----------|-------|
+| `SNOWFLAKE_ACCOUNT` | yes | e.g. `<org>-<account>` |
+| `SNOWFLAKE_USER` | yes | key-pair user (e.g. `OPERATIONS`) |
+| `SNOWFLAKE_PRIVATE_KEY_PATH` | one of the two | path to the `.p8` key |
+| `SNOWFLAKE_PRIVATE_KEY` | one of the two | PEM contents (CI secret stores) |
+| `SNOWFLAKE_AUTHENTICATOR` | no | default `SNOWFLAKE_JWT` |
+| `SNOWFLAKE_ROLE` | no | defaults per script (`FR_DATA_ENGINEER`, MCP `FR_BI_ANALYST`) |
+| `SNOWFLAKE_WAREHOUSE` | no | default `WH_APP_XSMALL` (`generate_and_load` → `WH_INGESTION_XSMALL`) — never `WH_CORTEX_LARGE` |
+| `SNOWFLAKE_DISABLE_OCSP` | no | default `true` (OCSP responder unreachable from the demo network); set `false` to enforce |
 
 !!! warning "Security Guardrails"
     Never hardcode credentials, restrict the agent's Snowflake role to demo-scoped grants

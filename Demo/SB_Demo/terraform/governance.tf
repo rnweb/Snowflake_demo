@@ -16,17 +16,25 @@ resource "snowflake_masking_policy" "national_id" {
   name     = var.masking_policy_national_id
   database = snowflake_database.demo.name
   schema   = snowflake_schema.governance.name
-  comment  = "Masks NATIONAL_ID — plaintext for admin roles only."
+  comment  = "Masks NATIONAL_ID — plaintext for admin roles; deterministic pseudonym ('***-**-' + SHA-256 suffix) for everyone else."
 
   argument {
     name = "val"
     type = "VARCHAR"
   }
 
+  # Deterministic masking (pseudonymization), not a constant literal:
+  # Snowflake evaluates WHERE predicates against the *post-policy* value, so a
+  # constant mask ('***-**-****') would make every non-admin filter match all
+  # or no rows. The same input always yields the same token, so non-admin
+  # roles can still filter and join on RUT (clients recompute the token from
+  # the plaintext they already know — see mcp_server.py), while the token is a
+  # one-way SHA-256 suffix: the RUT itself is never returned. Admin roles
+  # bypass and see plaintext.
   body = <<-SQL
     case
       when current_role() in ('${var.role_admin}', 'ACCOUNTADMIN') then val
-      else '***-**-****'
+      else '***-**-' || right(sha2(val, 256), 12)
     end
   SQL
 
@@ -123,6 +131,19 @@ resource "snowflake_table_column_masking_policy_application" "national_id" {
   count    = var.attach_policies_to_tables ? 1 : 0
 
   table          = "${var.demo_db_name}.${var.schema_core}.CLIENT_PROFILE_DIM"
+  column         = "RUT"
+  masking_policy = snowflake_masking_policy.national_id.fully_qualified_name
+}
+
+# Audit issue 3: RUT was masked in the dimension but left in plaintext in the
+# fact table, contradicting the "masked PII" narrative for Session 3. Same
+# policy instance on both columns keeps the pseudonym consistent for joins and
+# filters (both sides hash to the identical token).
+resource "snowflake_table_column_masking_policy_application" "national_id_fact" {
+  provider = snowflake.policy_author
+  count    = var.attach_policies_to_tables ? 1 : 0
+
+  table          = "${var.demo_db_name}.${var.schema_core}.CREDIT_CARD_TRANSACTIONS"
   column         = "RUT"
   masking_policy = snowflake_masking_policy.national_id.fully_qualified_name
 }

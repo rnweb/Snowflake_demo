@@ -1,0 +1,17 @@
+# ============================================================================
+# Remote state backend — copy to backend.hcl and fill in your store.
+#   cp backend.hcl.example backend.hcl
+#   terraform init -backend-config=backend.hcl -reconfigure
+# backend.hcl is git-ignored; NEVER commit environment-specific values.
+# ============================================================================
+
+bucket = "my-tf-state-bucket"
+key    = "sb-demo/terraform.tfstate"
+region = "us-east-1"
+
+encrypt = true
+
+# --- Cloudflare R2 / MinIO / other S3-compatible stores ---------------------
+# endpoint       = "https://<account-id>.r2.cloudflatestorage.com"
+# use_pathstyle  = true
+# skip_credentials_validation = true

@@ -83,7 +83,7 @@ variable "role_analyst" {
 # ---------------------------------------------------------------------------
 variable "masking_policy_national_id" {
   type        = string
-  description = "Masking policy for CLIENT_PROFILE_DIM.RUT (national ID)."
+  description = "Masking policy for RUT (national ID) on CLIENT_PROFILE_DIM and CREDIT_CARD_TRANSACTIONS; deterministic pseudonym for non-admin roles."
 }
 
 variable "masking_policy_credit_card" {

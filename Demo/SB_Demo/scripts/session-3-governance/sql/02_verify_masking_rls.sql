@@ -12,8 +12,12 @@
 --
 -- Expected results:
 --   FR_DEMO_ADMIN  -> RUT y NUMERO_TARJETA en claro, 3 unidades, 18 000 filas
---   FR_BI_ANALYST  -> RUT '***-**-****', tarjeta '****-****-****-****',
---                     solo RETAIL (5 849 filas), misma SQL sin cambios de app
+--   FR_BI_ANALYST  -> RUT como pseudónimo determinista ***-**-<12 hex>
+--                     (mismo token que la dim → joins/filtros siguen casando),
+--                     tarjeta '****-****-****-****', solo RETAIL (5 849 filas),
+--                     misma SQL sin cambios de app
+-- Note: the RUT mask is deterministic, so WHERE RUT = '<token>' still matches
+-- for non-admin roles (predicates run on the post-policy value).
 -- =============================================================================
 
 -- -----------------------------------------------------------------------------
@@ -26,7 +30,7 @@ FROM SUPERINTENDENCY_DEMO_DB.CORE_BANKING_SCHEMA.CLIENT_PROFILE_DIM
 ORDER BY RUT
 LIMIT 5;
 
-SELECT NUMERO_TARJETA, CATEGORIA, MONTO, ESTADO, UNIDAD_NEGOCIO
+SELECT RUT, NUMERO_TARJETA, CATEGORIA, MONTO, ESTADO, UNIDAD_NEGOCIO
 FROM SUPERINTENDENCY_DEMO_DB.CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS
 ORDER BY MONTO DESC
 LIMIT 5;
@@ -54,10 +58,16 @@ FROM CLIENT_PROFILE_DIM
 ORDER BY RUT
 LIMIT 5;
 
-SELECT NUMERO_TARJETA, CATEGORIA, MONTO, ESTADO, UNIDAD_NEGOCIO
+SELECT RUT, NUMERO_TARJETA, CATEGORIA, MONTO, ESTADO, UNIDAD_NEGOCIO
 FROM CREDIT_CARD_TRANSACTIONS
 ORDER BY MONTO DESC
 LIMIT 5;
+
+-- Deterministic mask proof: filtering by the pseudonym the analyst just saw
+-- must still return rows (expected: > 0; a random mask would return 0).
+SELECT COUNT(*) AS FILAS_MISMO_TOKEN
+FROM CREDIT_CARD_TRANSACTIONS
+WHERE RUT = (SELECT MIN(RUT) FROM CREDIT_CARD_TRANSACTIONS);
 
 SELECT UNIDAD_NEGOCIO, COUNT(*) AS TRANSACCIONES
 FROM CREDIT_CARD_TRANSACTIONS

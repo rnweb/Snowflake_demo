@@ -8,16 +8,32 @@ One tool, ``query_customer_transactions``, is exposed over stdio for local MCP
 clients such as Claude Desktop. It reads
 ``SUPERINTENDENCY_DEMO_DB.CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS`` with
 the Snowflake Python Connector; credentials and the role come from environment
-variables. Set ``SNOWFLAKE_ROLE=FR_BI_ANALYST`` to prove the agent only sees
-masked PII (``MASK_CREDIT_CARD``) and RLS-restricted rows
-(``RLS_BUSINESS_UNIT`` → RETAIL only); set ``FR_DEMO_ADMIN`` to show the
-plaintext contrast.
+variables (fail-fast if missing):
+
+    required : SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER and one of
+               SNOWFLAKE_PRIVATE_KEY_PATH / SNOWFLAKE_PRIVATE_KEY
+    optional : SNOWFLAKE_AUTHENTICATOR (default SNOWFLAKE_JWT),
+               SNOWFLAKE_ROLE        (default FR_BI_ANALYST),
+               SNOWFLAKE_WAREHOUSE   (default WH_APP_XSMALL — small warehouse,
+               the tool never needs WH_CORTEX_LARGE)
+
+Governance: RUT is masked by MASK_NATIONAL_ID with a *deterministic*
+pseudonym (``'***-**-' || right(sha2(val, 256), 12)`` — see
+terraform/governance.tf) and NUMERO_TARJETA by MASK_CREDIT_CARD; the
+row-access policy RLS_BUSINESS_UNIT limits non-admin roles to their business
+units. Because Snowflake evaluates WHERE predicates on the post-policy value,
+the server recomputes the same pseudonym from the plaintext RUT supplied by
+the presenter so FR_BI_ANALYST can still filter; FR_DEMO_ADMIN bypasses the
+policy and filters with the plaintext value. Set ``SNOWFLAKE_ROLE=FR_BI_ANALYST``
+to prove the agent only sees pseudonymized/masked PII and RLS-restricted rows;
+set ``FR_DEMO_ADMIN`` to show the plaintext contrast.
 
 Run:  python mcp_server.py        (stdio transport)
 """
 
 from __future__ import annotations
 
+import hashlib
 import os
 from datetime import date, datetime
 from decimal import Decimal
@@ -33,6 +49,11 @@ DB = "SUPERINTENDENCY_DEMO_DB"
 SCHEMA = "CORE_BANKING_SCHEMA"
 TABLE = "CREDIT_CARD_TRANSACTIONS"
 
+# Keep in sync with the MASK_NATIONAL_ID / RLS policy bodies in
+# terraform/governance.tf (role_admin + ACCOUNTADMIN bypass).
+_ADMIN_ROLES = ("FR_DEMO_ADMIN", "ACCOUNTADMIN")
+_MASK_PREFIX = "***-**-"
+
 mcp = MCPServer(
     "sb-lakehouse",
     instructions=(
@@ -42,6 +63,17 @@ mcp = MCPServer(
         "connecting role's masking and row-level security policies."
     ),
 )
+
+
+def _pseudonym(rut: str) -> str:
+    """Deterministic MASK_NATIONAL_ID value for ``rut``.
+
+    Mirrors the policy body in terraform/governance.tf:
+    ``'***-**-' || right(sha2(val, 256), 12)``. Snowflake's SHA2 hex digest is
+    lowercase, identical to Python's ``hexdigest()`` for ASCII input (Chilean
+    RUTs are pure ASCII).
+    """
+    return _MASK_PREFIX + hashlib.sha256(rut.encode("utf-8")).hexdigest()[-12:]
 
 
 def _connect() -> snowflake.connector.SnowflakeConnection:
@@ -65,8 +97,10 @@ def _connect() -> snowflake.connector.SnowflakeConnection:
         "login_timeout": 20,
         "network_timeout": 60,
         # OCSP responder unreachable from this network (same workaround as
-        # 01_train_fraud_model.py — otherwise connect() hangs).
-        "disable_ocsp_checks": True,
+        # 01_train_fraud_model.py — otherwise connect() hangs). Opt out with
+        # SNOWFLAKE_DISABLE_OCSP=false to enforce OCSP validation.
+        "disable_ocsp_checks": os.getenv("SNOWFLAKE_DISABLE_OCSP", "true").lower()
+        in {"1", "true", "yes"},
     }
 
     key_path = os.environ.get("SNOWFLAKE_PRIVATE_KEY_PATH")
@@ -116,10 +150,12 @@ def query_customer_transactions(rut: str, limit: int = 20) -> dict[str, Any]:
         rut: Chilean national ID (Rol Único Tributario), e.g. "5.000.081-8".
         limit: Maximum rows to return (1-100, newest first).
 
-    The query runs as the connected role: masking policies hide card numbers
-    and the row-access policy limits which business units are visible, so two
+    The query runs as the connected role: RUT comes back as a deterministic
+    pseudonym and NUMERO_TARJETA as a masked literal for non-admin roles, and
+    the row-access policy limits which business units are visible — so two
     roles receive different result sets from this same tool without any
-    application changes.
+    application changes. Filtering works for both: admins match on plaintext,
+    everyone else on the pseudonym recomputed here from the supplied RUT.
     """
     rut = (rut or "").strip()
     if not rut:
@@ -132,6 +168,18 @@ def query_customer_transactions(rut: str, limit: int = 20) -> dict[str, Any]:
         cur.execute("SELECT CURRENT_ROLE(), CURRENT_WAREHOUSE()")
         role, warehouse = cur.fetchone()
 
+        # WHERE sees the post-policy value of a masked column. Admins bypass
+        # MASK_NATIONAL_ID (plaintext); all other roles see the deterministic
+        # pseudonym, so the predicate must use the recomputed token — filtering
+        # with the plaintext RUT would silently return 0 rows.
+        if role in _ADMIN_ROLES:
+            rut_lookup, rut_filter = rut, "plaintext (admin policy bypass)"
+        else:
+            rut_lookup, rut_filter = (
+                _pseudonym(rut),
+                "deterministic pseudonym (MASK_NATIONAL_ID)",
+            )
+
         sql = f"""
             SELECT
                 ID_TRANSACCION, FECHA_TRANSACCION, MONTO, CATEGORIA,
@@ -142,7 +190,7 @@ def query_customer_transactions(rut: str, limit: int = 20) -> dict[str, Any]:
             ORDER BY FECHA_TRANSACCION DESC
             LIMIT {limit}
         """
-        cur.execute(sql, {"rut": rut})
+        cur.execute(sql, {"rut": rut_lookup})
         columns = [col[0] for col in cur.description]
         rows = [
             {col: _jsonable(val) for col, val in zip(columns, row)}
@@ -157,11 +205,13 @@ def query_customer_transactions(rut: str, limit: int = 20) -> dict[str, Any]:
         "warehouse": warehouse,
         "table": f"{DB}.{SCHEMA}.{TABLE}",
         "rut": rut,
+        "rut_filter": rut_filter,
         "row_count": len(rows),
         "rows": rows,
         "governance": (
-            "NUMERO_TARJETA is masked by MASK_CREDIT_CARD and rows are "
-            "filtered by RLS_BUSINESS_UNIT for non-admin roles."
+            "RUT is pseudonymized by MASK_NATIONAL_ID (deterministic, "
+            "one-way), NUMERO_TARJETA is masked by MASK_CREDIT_CARD and rows "
+            "are filtered by RLS_BUSINESS_UNIT for non-admin roles."
         ),
     }
 
