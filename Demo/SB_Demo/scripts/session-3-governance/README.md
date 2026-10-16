@@ -6,11 +6,17 @@ Same tables, three personas, **zero application changes**: dynamic masking for
 PII and row-level security by business unit, plus the Horizon object-tagging
 complement — all discoverable in Snowsight.
 
-| Persona (role) | `RUT` / `NUMERO_TARJETA` | Business units visible |
-|----------------|--------------------------|------------------------|
+| Persona (role) | `RUT` (dim + fact) / `NUMERO_TARJETA` | Business units visible |
+|----------------|----------------------------------------|------------------------|
 | `FR_DEMO_ADMIN` / `ACCOUNTADMIN` | **plaintext** (policy bypass) | PYME + CORPORATIVO + RETAIL (18 000 rows) |
-| `FR_DATA_ENGINEER` | masked `****-****-****-****` | all three — mapped to every unit (dbt/ML keep working) |
-| `FR_BI_ANALYST` | masked `***-**-****` / `****-****-****-****` | **RETAIL only (5 849 rows)** |
+| `FR_DATA_ENGINEER` | pseudonym `***-**-<12 hex>` / masked `****-****-****-****` | all three — mapped to every unit (dbt/ML keep working) |
+| `FR_BI_ANALYST` | pseudonym `***-**-<12 hex>` / masked `****-****-****-****` | **RETAIL only (5 849 rows)** |
+
+The RUT mask is **deterministic** (`'***-**-' || right(sha2(val,256),12)`):
+non-admins always see the same pseudonym for the same RUT, and filters keep
+matching (Snowflake applies `WHERE` to the *post-policy* value — a random
+mask would return 0 rows). The MCP server in Session 2 relies on exactly this
+to filter as `FR_BI_ANALYST`.
 
 ## Objects in scope (exact names)
 
@@ -19,7 +25,7 @@ complement — all discoverable in Snowsight.
 | Raw source | `SUPERINTENDENCY_DEMO_DB.STAGING_SCHEMA.CLIENTES` | upstream client data — lineage starts here (no policies attached) |
 | dbt staging view | `SUPERINTENDENCY_DEMO_DB.STAGING_SCHEMA.STG_CLIENTES` | middle hop of the lineage chain |
 | dbt mart | `SUPERINTENDENCY_DEMO_DB.CORE_BANKING_SCHEMA.CLIENT_PROFILE_DIM` | `RUT` column → `MASK_NATIONAL_ID` |
-| dbt mart | `SUPERINTENDENCY_DEMO_DB.CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS` | `NUMERO_TARJETA` → `MASK_CREDIT_CARD`; `UNIDAD_NEGOCIO` → `RLS_BUSINESS_UNIT` |
+| dbt mart | `SUPERINTENDENCY_DEMO_DB.CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS` | `RUT` → `MASK_NATIONAL_ID` (deterministic pseudonym); `NUMERO_TARJETA` → `MASK_CREDIT_CARD`; `UNIDAD_NEGOCIO` → `RLS_BUSINESS_UNIT` |
 | Policy data | `SUPERINTENDENCY_DEMO_DB.GOVERNANCE_SCHEMA.ROLE_MAPPING` | role → business-unit mapping consumed by the RLS policy |
 
 > dbt model names are lowercase in the project (`client_profile_dim`,
@@ -40,8 +46,10 @@ complement — all discoverable in Snowsight.
 - Sessions 1–2 complete (mart tables + dbt run exist)
 - `terraform/terraform.tfvars` → `attach_policies_to_tables = true`, then
   `terraform plan` (No changes) + `terraform apply` — attaches
-  `MASK_NATIONAL_ID` → `CORE_BANKING_SCHEMA.CLIENT_PROFILE_DIM.RUT` and
+  `MASK_NATIONAL_ID` → `CORE_BANKING_SCHEMA.CLIENT_PROFILE_DIM.RUT`,
+  `MASK_NATIONAL_ID` → `CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS.RUT` and
   `MASK_CREDIT_CARD` → `CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS.NUMERO_TARJETA`
+  (3 column-policy applications)
 - Environment: `SNOWFLAKE_ACCOUNT`, `SNOWFLAKE_USER` (key-pair),
   `SNOWFLAKE_PRIVATE_KEY_PATH`
 - Role: `FR_DEMO_ADMIN` (granted to `OPERATIONS`), warehouse: `WH_APP_XSMALL`
@@ -85,7 +93,8 @@ session would inherit `FR_DATA_ENGINEER`'s raw-layer privileges even though
 
 | Check | `FR_DEMO_ADMIN` | `FR_BI_ANALYST` |
 |-------|-----------------|-----------------|
-| `CORE_BANKING_SCHEMA.CLIENT_PROFILE_DIM.RUT` | `5.000.081-8` (plaintext) | `***-**-****` |
+| `CORE_BANKING_SCHEMA.CLIENT_PROFILE_DIM.RUT` | `5.000.081-8` (plaintext) | `***-**-<12 hex>` pseudonym (same token as admin's `5.000.081-8`) |
+| `CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS.RUT` | `5.000.081-8` (plaintext) | `***-**-<12 hex>` pseudonym (identical to the dim token → joins/filters still match) |
 | `CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS.NUMERO_TARJETA` | `3714-4911-9269-2129` | `****-****-****-****` |
 | Rows per unit (`CREDIT_CARD_TRANSACTIONS`) | `CORPORATIVO 5928 / PYME 6223 / RETAIL 5849` (18 000) | `RETAIL 5849` only |
 | `GOVERNANCE_SCHEMA.ROLE_MAPPING` | 4 rows visible | n/a |
@@ -132,9 +141,12 @@ Terraform (`admin_core_modify`).
 1. Same table, two roles → two different result sets, zero application changes.
 2. Masking policies survive BI tool queries (the policy follows the column,
    not the tool); RLS filters rows by business unit at query time.
-3. Enforcement (masking/RLS) is Terraform-managed; row *data* (the mapping)
+3. Masks are deterministic *by design*: `WHERE` runs on the post-policy value,
+   so the pseudonym keeps `RUT = ...` queries working for non-admins —
+   security without breaking the analytics (demo: MCP filter, Session 2).
+4. Enforcement (masking/RLS) is Terraform-managed; row *data* (the mapping)
    and the RLS binding live in SQL scripts — right split for review/audit.
-4. Object tagging classifies PII for discovery; lineage shows its path —
+5. Object tagging classifies PII for discovery; lineage shows its path —
    classification, enforcement and visibility in one platform.
 
 ## Quickstart Source (cloned, immutable)

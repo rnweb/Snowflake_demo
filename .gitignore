@@ -29,3 +29,6 @@ Demo/SB_Demo/quickstarts/*/
 
 # SB_Demo — Session 1 generated synthetic CSVs (recreated by the loader script)
 Demo/SB_Demo/scripts/session-1-lakehouse/data/
+
+# Terraform remote backend local config (environment-specific)
+Demo/SB_Demo/terraform/backend.hcl

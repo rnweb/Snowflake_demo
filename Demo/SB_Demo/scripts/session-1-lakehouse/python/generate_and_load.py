@@ -4,13 +4,23 @@ Generates Spanish banking datasets (modeled on the official Snowflake
 Quickstart schema: CUSTOMERS / CREDIT_CARDS / TRANSACTIONS), PUTs them to an
 internal stage and runs COPY INTO the STAGING_SCHEMA raw tables.
 
-Role: FR_DATA_ENGINEER | Warehouse: WH_INGESTION_XSMALL
+Role: FR_DATA_ENGINEER (override: SNOWFLAKE_ROLE)
+Warehouse: WH_INGESTION_XSMALL (override: SNOWFLAKE_WAREHOUSE)
+
+Environment (no hardcoded users, accounts or key paths — fail-fast if unset):
+    required : SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER and one of
+               SNOWFLAKE_PRIVATE_KEY_PATH / SNOWFLAKE_PRIVATE_KEY
+    optional : SNOWFLAKE_AUTHENTICATOR (default SNOWFLAKE_JWT),
+               SNOWFLAKE_ROLE, SNOWFLAKE_WAREHOUSE,
+               SNOWFLAKE_DISABLE_OCSP   (default true — the OCSP responder
+               is unreachable from the demo network; set false to enforce)
 
 Usage (from the repository root):
     python Demo/SB_Demo/scripts/session-1-lakehouse/python/generate_and_load.py
 """
 
 import csv
+import os
 import random
 import sys
 import tempfile
@@ -182,6 +192,53 @@ def run_sql_file(cursor, sql_path: Path) -> None:
         cursor.execute(stmt)
 
 
+def _require_env(name: str) -> str:
+    value = os.getenv(name)
+    if not value:
+        sys.exit(
+            f"missing required environment variable {name} — set it in your "
+            "shell (see 'Environment' in scripts/session-1-lakehouse/README.md)"
+        )
+    return value
+
+
+def _connect_kwargs() -> dict:
+    """Connection settings from environment variables only (fail-fast)."""
+    kwargs: dict = {
+        "account": _require_env("SNOWFLAKE_ACCOUNT"),
+        "user": _require_env("SNOWFLAKE_USER"),
+        "authenticator": os.getenv("SNOWFLAKE_AUTHENTICATOR", "SNOWFLAKE_JWT"),
+        "role": os.getenv("SNOWFLAKE_ROLE", "FR_DATA_ENGINEER"),
+        "warehouse": os.getenv("SNOWFLAKE_WAREHOUSE", "WH_INGESTION_XSMALL"),
+        "database": "SUPERINTENDENCY_DEMO_DB",
+        "schema": "STAGING_SCHEMA",
+        "login_timeout": 20,
+        "disable_ocsp_checks": os.getenv("SNOWFLAKE_DISABLE_OCSP", "true").lower()
+        in {"1", "true", "yes"},
+    }
+
+    key_path = os.getenv("SNOWFLAKE_PRIVATE_KEY_PATH")
+    key_pem = os.getenv("SNOWFLAKE_PRIVATE_KEY")
+    if key_path:
+        kwargs["private_key_file"] = key_path
+    elif key_pem:
+        from cryptography.hazmat.primitives import serialization
+
+        kwargs["private_key"] = serialization.load_pem_private_key(
+            key_pem.encode(), password=None
+        ).private_bytes(
+            serialization.Encoding.DER,
+            serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption(),
+        )
+    else:
+        sys.exit(
+            "set SNOWFLAKE_PRIVATE_KEY_PATH (path to your .p8 key) or "
+            "SNOWFLAKE_PRIVATE_KEY (PEM contents) for key-pair authentication"
+        )
+    return kwargs
+
+
 def main() -> int:
     session_dir = Path(__file__).resolve().parents[1]
     sql_dir = session_dir / "sql"
@@ -192,16 +249,7 @@ def main() -> int:
     for name, path in paths.items():
         print(f"[1/4] generated {name:<16} {len(dataset[name]):>6} rows -> {path}")
 
-    ctx = snowflake.connector.connect(
-        account="RBGXIGI-UAC53151",
-        user="OPERATIONS",
-        private_key_file=r"C:\Users\rnweb\rsa_key.p8",
-        authenticator="SNOWFLAKE_JWT",
-        role="FR_DATA_ENGINEER",
-        warehouse="WH_INGESTION_XSMALL",
-        database="SUPERINTENDENCY_DEMO_DB",
-        schema="STAGING_SCHEMA",
-    )
+    ctx = snowflake.connector.connect(**_connect_kwargs())
     try:
         cursor = ctx.cursor()
         print(f"[2/4] connected as {cursor.execute('select current_role()').fetchone()[0]} "

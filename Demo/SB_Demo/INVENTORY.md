@@ -5,9 +5,10 @@ three sessions (infrastructure, data, AI and governance). Infrastructure is
 Terraform-managed (`terraform/`); data and logic live
 under `scripts/` and `dbt/`.
 
-Snapshot verified against the live account on **2026-09-29** and re-verified on
-**2026-10-07** after the security hardening below (`SHOW` commands and
-`COUNT(*)` per table — see [Verification](#verification)).
+Snapshot verified against the live account on **2026-09-29**, re-verified on
+**2026-10-07** after the security hardening and on **2026-10-15** after the
+third-party audit fixes below (`SHOW` commands and `COUNT(*)` per table — see
+[Verification](#verification)).
 
 ## Naming: raw tables vs dbt models
 
@@ -41,8 +42,8 @@ Snapshot verified against the live account on **2026-09-29** and re-verified on
 | Warehouse | Size | Auto-suspend | Purpose |
 |-----------|------|--------------|---------|
 | `WH_INGESTION_XSMALL` | XSMALL | 60 s | Snowpipe / dbt runs |
-| `WH_CORTEX_LARGE` | LARGE | 120 s | ML training + Cortex LLM queries |
-| `WH_APP_XSMALL` | XSMALL | 60 s | Streamlit / Native App compute |
+| `WH_CORTEX_LARGE` | LARGE | 120 s | Optional heavy benches only — **no script defaults here** (trial-credit guardrail); runtimes accept `SNOWFLAKE_WAREHOUSE` |
+| `WH_APP_XSMALL` | XSMALL | 60 s | Default compute: Streamlit / Native App, ML training, Cortex SQL, MCP sessions |
 
 All created `INITIALLY SUSPENDED`; timeouts 300 s (ingestion/app), 600 s (Cortex).
 
@@ -77,7 +78,7 @@ FR_TERRAFORM                 # separate IaC-only role (no demo-hierarchy grants)
 | `RAW_STAGE` | `STAGING_SCHEMA` | Session 1 SQL | Raw CSV landing |
 | `RAW_CSV_FORMAT` (CSV) | `STAGING_SCHEMA` | Session 1 SQL | CSV parsing (`SKIP_HEADER=1`) |
 | `ICEBERG_DEMO_STAGE` | `STAGING_SCHEMA` | Session 1 `03_iceberg…` | Parquet source for the Iceberg table |
-| `STREAMLIT_STAGE` | `CORTEX_NATIVE_APP_DB.PUBLIC` | `main.tf` | Holds `streamlit_app.py` until manual deploy |
+| `STREAMLIT_STAGE` | `CORTEX_NATIVE_APP_DB.PUBLIC` | `main.tf` | App source files (deployed via `session-2/sql/04_deploy_streamlit.sql`, human-gated) |
 
 ---
 
@@ -93,9 +94,12 @@ FR_TERRAFORM                 # separate IaC-only role (no demo-hierarchy grants)
 | `…STAGING_SCHEMA.STG_TRANSACCIONES` | view | — | dbt (`staging/stg_transacciones.sql`) |
 | `…CORE_BANKING_SCHEMA.HISTORICO_TRANSACCIONES_ICEBERG` | **Iceberg table** | 18 000 | Session 1 `03_iceberg_lakehouse_demo.sql` |
 
-- Iceberg table: managed Snowflake storage (`CATALOG='SNOWFLAKE'`), loaded from
-  Parquet on `ICEBERG_DEMO_STAGE` (3 files, 518 744 bytes); row parity with the
-  raw mart verified (`is_iceberg='Y'`).
+- Iceberg table: **open-format, Snowflake-managed** (`CATALOG='SNOWFLAKE'` —
+  Iceberg spec files on Snowflake storage, loaded from Parquet on
+  `ICEBERG_DEMO_STAGE`, 3 files, 518 744 bytes); row parity with the raw mart
+  verified (`is_iceberg='Y'`). Reading it from *external* engines would need an
+  **External Volume** (cloud-storage credentials) — a documented future
+  extension, not provisioned in this demo.
 - No masking or RLS policies are attached to this layer — and since the
   2026-10-07 hardening `FR_BI_ANALYST` has **no access here at all**
   ([scope notes](#scope-notes)); raw tables are reachable by
@@ -108,7 +112,7 @@ FR_TERRAFORM                 # separate IaC-only role (no demo-hierarchy grants)
 | Object (exact name) | Type | Rows | Created by | Governance |
 |---------------------|------|------|------------|------------|
 | `…CORE_BANKING_SCHEMA.CLIENT_PROFILE_DIM` | table (dbt `client_profile_dim`) | 600 | `dbt build` | `RUT` → `MASK_NATIONAL_ID` |
-| `…CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS` | incremental (dbt `credit_card_transactions`) | 18 000 | `dbt build` | `NUMERO_TARJETA` → `MASK_CREDIT_CARD`; `UNIDAD_NEGOCIO` → `RLS_BUSINESS_UNIT` |
+| `…CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS` | incremental (dbt `credit_card_transactions`) | 18 000 | `dbt build` | `RUT` → `MASK_NATIONAL_ID` (deterministic); `NUMERO_TARJETA` → `MASK_CREDIT_CARD`; `UNIDAD_NEGOCIO` → `RLS_BUSINESS_UNIT` |
 | `…GOVERNANCE_SCHEMA.ROLE_MAPPING` | table | 4 | `governance.tf` DDL + Session 3 seed | RLS lookup: role → business unit |
 
 Mart facts: `UNIDAD_NEGOCIO` = PYME 6 223 / CORPORATIVO 5 928 / RETAIL 5 849;
@@ -122,8 +126,8 @@ Mart facts: `UNIDAD_NEGOCIO` = PYME 6 223 / CORPORATIVO 5 928 / RETAIL 5 849;
 |-------|--------|
 | **Model** `SUPERINTENDENCY_DEMO_DB.RISK_ANALYTICS_SCHEMA.DETECTOR_FRAUDES` (V1) | RandomForest fraud detector, trained by `session-2/python/01_train_fraud_model.py` on the mart; features `MONTO, HORA, DIA_SEMANA, FIN_DE_SEMANA, CATEGORIA_ALTO_RIESGO, UNIDAD_NEGOCIO_COD`; ACCURACY 0.931 / RECALL 0.440 / PRECISION 0.761; callable from SQL via `MODEL(…DETECTOR_FRAUDES, V1)!predict(…)` |
 | **Cortex AI** (4 statements, `session-2/sql/02_cortex_ai_features.sql`) | `SNOWFLAKE.CORTEX.SUMMARIZE`, `SNOWFLAKE.CORTEX.TRANSLATE`, `SNOWFLAKE.CORTEX.COMPLETE('llama3.1-70b', …)`, `SNOWFLAKE.CORTEX.COMPLETE('llama3.1-8b', …)` — Spanish prompts. **Trial account gate `399258`**: statements compile and resolve but return "not available for trial accounts" until run on a standard account |
-| **Streamlit** `PANEL_PREVENCION_FRAUDE` | Source: `session-2/streamlit_app.py` (Spanish UI: KPIs, charts, model-inference form, Cortex text box). Stage `STREAMLIT_STAGE` is provisioned; **the app is intentionally not deployed by automation** (human-approved manual `CREATE STREAMLIT` — currently not deployed) |
-| **MCP server** (C06-PRE-06 & C06-AE-08) | `session-2/python/mcp_server.py` — stdio Model Context Protocol server exposing `query_customer_transactions(rut)` over `CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS`; credentials/role from env vars (`SNOWFLAKE_ROLE` default `FR_BI_ANALYST`), each call runs `USE SECONDARY ROLES NONE`; masking + RLS proven with Claude Desktop (see session-2 README) |
+| **Streamlit** `PANEL_PREVENCION_FRAUDE` | Source: `session-2/streamlit_app.py` (Spanish UI: KPIs, charts, model-inference form, Cortex text box). **Deployed 2026-10-15** via `session-2/sql/04_deploy_streamlit.sql` (`PUT` + `CREATE STREAMLIT` as `FR_DATA_ENGINEER`, `WH_APP_XSMALL`) after explicit human approval — automation still never deploys on its own; `SHOW STREAMLITS` returns the app (`owner FR_DATA_ENGINEER`) |
+| **MCP server** (C06-PRE-06 & C06-AE-08) | `session-2/python/mcp_server.py` — stdio Model Context Protocol server exposing `query_customer_transactions(rut)` over `CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS`; credentials/role from env vars (`SNOWFLAKE_ROLE` default `FR_BI_ANALYST`), each call runs `USE SECONDARY ROLES NONE`; **role-aware filter**: non-admins recompute the deterministic RUT pseudonym client-side (Snowflake `WHERE` sees post-policy values), admins filter plaintext — masking + RLS proven with Claude Desktop (see session-2 README) |
 
 ---
 
@@ -133,21 +137,22 @@ Mart facts: `UNIDAD_NEGOCIO` = PYME 6 223 / CORPORATIVO 5 928 / RETAIL 5 849;
 
 | Object | Type | Attached to | Effect |
 |--------|------|-------------|--------|
-| `MASK_NATIONAL_ID` | masking policy | `CORE_BANKING_SCHEMA.CLIENT_PROFILE_DIM.RUT` | `***-**-****` for non-admin roles |
+| `MASK_NATIONAL_ID` | masking policy | `CORE_BANKING_SCHEMA.CLIENT_PROFILE_DIM.RUT` + `CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS.RUT` (2 applications) | deterministic `***-**-<12 hex>` pseudonym (`right(sha2(val,256),12)`) for non-admin roles — same token everywhere, so `WHERE`/joins still match |
 | `MASK_CREDIT_CARD` | masking policy | `CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS.NUMERO_TARJETA` | `****-****-****-****` for non-admin roles |
 | `RLS_BUSINESS_UNIT` | row-access policy | `CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS.UNIDAD_NEGOCIO` | Row filter via `GOVERNANCE_SCHEMA.ROLE_MAPPING` (bound by Session 3 SQL — one-shot `ALTER TABLE`) |
 | `DATA_CLASSIFICATION` | tag | `CLIENT_PROFILE_DIM.RUT`, `CREDIT_CARD_TRANSACTIONS.NUMERO_TARJETA` (domain `COLUMN`) | Horizon label `= 'PII'` (set by Session 3 `03_object_tagging_demo.sql`) |
 
 Attachment switch: `terraform/terraform.tfvars` → `attach_policies_to_tables = true`
-(both masking policies are attached via `snowflake.policy_author`).
+(**3 column-policy applications** via `snowflake.policy_author`:
+`dim.RUT`, `fact.RUT`, `fact.NUMERO_TARJETA`).
 
 ### Verified access matrix
 
 | Persona | PII (`RUT` / `NUMERO_TARJETA`) | Transaction rows | Build objects |
 |---------|-------------------------------|------------------|---------------|
 | `FR_DEMO_ADMIN` / `ACCOUNTADMIN` | plaintext (policy bypass) | 18 000 (PYME+CORPORATIVO+RETAIL) | yes |
-| `FR_DATA_ENGINEER` | masked | 18 000 (all units — dbt/ML keep working) | yes |
-| `FR_BI_ANALYST` | masked | 5 849 (RETAIL only) | no (read-only) |
+| `FR_DATA_ENGINEER` | pseudonym `***-**-<12 hex>` / masked `****-****-****-****` | 18 000 (all units — dbt/ML keep working) | yes |
+| `FR_BI_ANALYST` | pseudonym `***-**-<12 hex>` / masked `****-****-****-****` | 5 849 (RETAIL only) | no (read-only) |
 
 Policy subqueries run with the policy owner's privileges, so `FR_BI_ANALYST`
 needs **no** governance grants of its own.
@@ -174,6 +179,17 @@ needs **no** governance grants of its own.
   `SELECT COUNT(*) …STAGING_SCHEMA.CLIENTES` **fails with `002003`** for the
   isolated analyst session while the core mart stays readable (5 849 RETAIL
   rows).
+- **Fact-table RUT masked (2026-10-15 audit).** `CREDIT_CARD_TRANSACTIONS.RUT`
+  previously exposed plaintext PII while the dim column was masked (same
+  audit issue as the raw-layer gap). The column is now attached to
+  `MASK_NATIONAL_ID`, and the policy body was changed from a constant
+  `***-**-****` to a **deterministic** token: Snowflake applies `WHERE` to the
+  *post-policy* value, so a constant mask broke every analyst filter
+  (plaintext `WHERE RUT='5.017.491-3'` → 0 rows) while the token form
+  (`WHERE RUT='***-**-e93d5c93280b'` → 76 rows) keeps queries working.
+  `mcp_server.py` mirrors the policy (`sha256(rut)[-12:]`) so non-admin MCP
+  sessions filter by the pseudonym and admins by plaintext — verified live
+  for both personas (2026-10-15).
 - Schema `COMMENT`s follow the Medallion wording in `terraform/main.tf`
   (Bronze / Silver-Gold / Data Science) and were applied to the live schemas
   on 2026-10-07.
@@ -188,6 +204,7 @@ SHOW MASKING POLICIES IN DATABASE SUPERINTENDENCY_DEMO_DB;
 SHOW ROW ACCESS POLICIES IN DATABASE SUPERINTENDENCY_DEMO_DB;
 SHOW TAGS IN DATABASE SUPERINTENDENCY_DEMO_DB;
 SHOW MODELS IN SCHEMA SUPERINTENDENCY_DEMO_DB.RISK_ANALYTICS_SCHEMA;
+SHOW STREAMLITS IN DATABASE CORTEX_NATIVE_APP_DB;  -- PANEL_PREVENCION_FRAUDE (deployed)
 SHOW GRANTS TO ROLE FR_BI_ANALYST;  -- must contain no STAGING_SCHEMA entries
 SELECT COUNT(*) FROM SUPERINTENDENCY_DEMO_DB.STAGING_SCHEMA.TRANSACCIONES;      -- 18000
 SELECT COUNT(*) FROM SUPERINTENDENCY_DEMO_DB.CORE_BANKING_SCHEMA.CLIENT_PROFILE_DIM; -- 600

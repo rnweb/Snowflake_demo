@@ -1,7 +1,7 @@
 # Phase 3 — Next Steps: Data, Logic & App Delivery
 
 > **Status:** Phase 2 (Terraform IaC) is **complete** — `terraform plan` reports
-> *"No changes. Your infrastructure matches the configuration."* (55 resources).
+> *"No changes. Your infrastructure matches the configuration."* (56 resources).
 
 Phase 3 delivers everything Terraform deliberately does **not** manage: data,
 transformation logic and application code. Per the separation of concerns, these
@@ -53,19 +53,21 @@ GRANT APPLY ROW ACCESS POLICY ON ACCOUNT TO ROLE FR_DEMO_ADMIN;
 
    - Staging views in `STAGING_SCHEMA` (`stg_*`), marts in
      `CORE_BANKING_SCHEMA` (`CLIENT_PROFILE_DIM`, `CREDIT_CARD_TRANSACTIONS`)
-   - Expected: `PASS=41 WARN=0 ERROR=0`
+   - Expected: `PASS=41 WARN=0 ERROR=0` — 41 passes = 5 models + 36 tests
+     (19 staging schema tests + 16 core schema tests + 1 singular test)
    - Full presenter runbook: `scripts/session-1-lakehouse/README.md`
 3. **Quickstart reference:** `quickstarts/dbt-on-snowflake`.
 
 ## 2. Session 2 — Snowpark, Cortex & Streamlit (`scripts/session-2-analytics-ai/`)
 
 1. **Snowpark ML** — `python/01_train_fraud_model.py` as `FR_DATA_ENGINEER` on
-   `WH_CORTEX_LARGE`: feature SQL over the dbt mart, RandomForest training,
-   evaluation and registration of `RISK_ANALYTICS_SCHEMA.DETECTOR_FRAUDES`
-   (V1), callable from SQL.
+   `WH_APP_XSMALL` (small default; `SNOWFLAKE_WAREHOUSE` override —
+   `WH_CORTEX_LARGE` only when credits allow): feature SQL over the dbt mart,
+   RandomForest training, evaluation and registration of
+   `RISK_ANALYTICS_SCHEMA.DETECTOR_FRAUDES` (V1), callable from SQL.
 2. **Cortex AI (español)** — `sql/02_cortex_ai_features.sql`, four statements
    (`CORTEX.SUMMARIZE`, `CORTEX.TRANSLATE`, `CORTEX.COMPLETE` ×2) as
-   `FR_DATA_ENGINEER` on `WH_CORTEX_LARGE`; trial accounts stop at the
+   `FR_DATA_ENGINEER` on `WH_APP_XSMALL`; trial accounts stop at the
    documented licence gate `399258`.
 3. **MCP server — required for the evaluators** — initialize before the demo:
 
@@ -80,11 +82,13 @@ GRANT APPLY ROW ACCESS POLICY ON ACCOUNT TO ROLE FR_DEMO_ADMIN;
    session runs `USE SECONDARY ROLES NONE`). **This step is required to
    demonstrate external AI integration and to verify the row-level security /
    dynamic data masking isolation for the evaluators**: masked card numbers,
+   deterministic RUT pseudonyms (analyst filters by recomputing the token),
    RETAIL-only rows, `002003` on the raw layer. Full setup and presenter demo
    script: `scripts/session-2-analytics-ai/README.md` (Step 4).
-4. **Streamlit** — `streamlit_app.py` deploys to `CORTEX_NATIVE_APP_DB.PUBLIC`
-   with `WH_APP_XSMALL`; run the `PUT` + `CREATE STREAMLIT` as
-   `FR_DATA_ENGINEER` **only after explicit human approval** (never automated).
+4. **Streamlit** — **deployed 2026-10-15**: `sql/04_deploy_streamlit.sql`
+   (`PUT` + `CREATE STREAMLIT` as `FR_DATA_ENGINEER`, `WH_APP_XSMALL`) runs
+   from the repo root with snowsql **only after explicit human approval**
+   (never automated; redeploys are equally gated).
 5. **Native App** — target database `CORTEX_NATIVE_APP_DB` (separate database
    on purpose; app installs are not Terraform-managed).
 6. **Quickstarts:** `quickstarts/dataengineering-ml-snowpark`
@@ -101,7 +105,9 @@ Executed **after** `CLIENT_PROFILE_DIM` and `CREDIT_CARD_TRANSACTIONS` exist
    `INSERT INTO GOVERNANCE_SCHEMA.ROLE_MAPPING ...` (Terraform creates the
    table; rows are data).
 2. **Masking** — set `attach_policies_to_tables = true` in
-   `terraform.tfvars`, then `terraform apply` (2 column-policy applications).
+   `terraform.tfvars`, then `terraform apply` (3 column-policy applications:
+   `dim.RUT`, `fact.RUT`, `fact.NUMERO_TARJETA` — the fact-table RUT uses the
+   deterministic pseudonym so analyst filters keep matching).
 3. **Row-level security** — bind via SQL (no Terraform resource exists for it):
 
    ```sql

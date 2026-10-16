@@ -13,7 +13,7 @@ This session shows how the platform moves from *governed data* to
    `CORTEX.COMPLETE` over the transactional data (Spanish prompts/outputs)
 3. **Streamlit (español)** — *Panel de Prevención de Fraude*: KPIs, charts,
    model-inference form and a Cortex text box (**deployment requires explicit
-   human approval**)
+   human approval**; deployed 2026-10-15 via `sql/04_deploy_streamlit.sql`)
 4. **MCP server** — one governed tool (`query_customer_transactions`) that an
    external AI client (e.g. Claude Desktop) queries over the Model Context
    Protocol; Snowflake enforces masking + RLS per connecting role
@@ -24,7 +24,8 @@ This session shows how the platform moves from *governed data* to
 |------|---------|
 | `python/01_train_fraud_model.py` | Feature SQL, training, evaluation, registry, SQL-inference check |
 | `sql/02_cortex_ai_features.sql`  | Four Cortex calls (Spanish) over `CREDIT_CARD_TRANSACTIONS` |
-| `streamlit_app.py`               | Streamlit app source (Spanish UI) — **not deployed by automation** |
+| `sql/04_deploy_streamlit.sql`    | PUT + `CREATE STREAMLIT` (human-gated deploy step; run from repo root with snowsql) |
+| `streamlit_app.py`               | Streamlit app source (Spanish UI) — deployed by `sql/04_deploy_streamlit.sql` after human approval |
 | `python/mcp_server.py`           | stdio MCP server exposing `query_customer_transactions(rut)` for AI clients |
 
 ## Prerequisites
@@ -43,9 +44,15 @@ This session shows how the platform moves from *governed data* to
   .venv\Scripts\python -m pip install snowflake-ml-python snowflake-snowpark-python scikit-learn streamlit plotly pandas
   ```
 
-- Environment variables (user scope, same as Session 1):
-  `SNOWFLAKE_ACCOUNT`, `SNOWFLAKE_USER`, `SNOWFLAKE_AUTHENTICATOR=SNOWFLAKE_JWT`,
-  `SNOWFLAKE_PRIVATE_KEY_PATH`
+- Environment variables (user scope, same as Session 1) — scripts read
+  **only** from the environment (fail-fast, no hardcoded accounts/users/keys):
+  - required: `SNOWFLAKE_ACCOUNT`, `SNOWFLAKE_USER`,
+    `SNOWFLAKE_PRIVATE_KEY_PATH` (or `SNOWFLAKE_PRIVATE_KEY` = PEM contents)
+  - optional: `SNOWFLAKE_AUTHENTICATOR` (default `SNOWFLAKE_JWT`),
+    `SNOWFLAKE_ROLE` (train: `FR_DATA_ENGINEER`, MCP: `FR_BI_ANALYST`),
+    `SNOWFLAKE_WAREHOUSE` (default `WH_APP_XSMALL`),
+    `SNOWFLAKE_DISABLE_OCSP` (default `true` — OCSP responder unreachable
+    from this network; set `false` to enforce OCSP validation)
 - Session 1 executed (the mart `CREDIT_CARD_TRANSACTIONS` must exist)
 
 ## Step 1 — Train & register the fraud model
@@ -56,10 +63,12 @@ From the repository root:
 .venv\Scripts\python -u Demo/SB_Demo/scripts/session-2-analytics-ai/python/01_train_fraud_model.py
 ```
 
-Expected output (role `FR_DATA_ENGINEER`, warehouse `WH_CORTEX_LARGE`):
+Expected output (role `FR_DATA_ENGINEER`, warehouse `WH_APP_XSMALL` — the
+small default keeps trial credits safe; override with `SNOWFLAKE_WAREHOUSE`,
+e.g. `WH_CORTEX_LARGE` for parallel training benches):
 
 ```
-[1/5] connected as FR_DATA_ENGINEER on WH_CORTEX_LARGE
+[1/5] connected as FR_DATA_ENGINEER on WH_APP_XSMALL
 [2/5] mart loaded: 18000 rows, 1675 proxy-fraud labels
 [3/5] RandomForest trained (80/20 split, seed=42)
 [4/5] evaluation: EVALUADOS=3651 ACCURACY=0.9310 RECALL=0.4404 PRECISION=0.7608
@@ -104,7 +113,8 @@ in Spanish):
    JSON para un sistema de alertas
 
 Run them from a Snowsight worksheet (or any SQL client) as
-**`FR_DATA_ENGINEER`** on **`WH_CORTEX_LARGE`**.
+**`FR_DATA_ENGINEER`** on **`WH_APP_XSMALL`** (or `WH_CORTEX_LARGE` when the
+account has credits to spare — never the default).
 
 > **Limitación de la cuenta demo:** esta cuenta es de prueba (*trial*) y
 > Snowflake devuelve `399258 (0A000): AI function ... is not available for
@@ -127,19 +137,13 @@ Run them from a Snowsight worksheet (or any SQL client) as
   cuentas trial)
 
 > 🚧 **Guardrail:** the automation never deploys apps. After explicit human
-> review and approval, the presenter runs the following as
-> **`FR_DATA_ENGINEER`**:
-
-```sql
-PUT file://Demo/SB_Demo/scripts/session-2-analytics-ai/streamlit_app.py
-  @CORTEX_NATIVE_APP_DB.PUBLIC.STREAMLIT_STAGE OVERWRITE=TRUE;
-
-CREATE OR REPLACE STREAMLIT PANEL_PREVENCION_FRAUDE
-  ROOT_LOCATION = '@CORTEX_NATIVE_APP_DB.PUBLIC.STREAMLIT_STAGE'
-  MAIN_FILE      = 'streamlit_app.py'
-  QUERY_WAREHOUSE = 'WH_APP_XSMALL'
-  COMMENT = 'Panel de Prevención de Fraude — demo Superintendencia de Bancos';
-```
+> review and approval of `streamlit_app.py`, the presenter runs
+> `sql/04_deploy_streamlit.sql` from the repository root with snowsql (`PUT`
+> is a client command — it does not run in a Snowsight worksheet) as
+> **`FR_DATA_ENGINEER`**. **Deployed 2026-10-15**: `SHOW STREAMLITS IN
+> DATABASE CORTEX_NATIVE_APP_DB` returns `PANEL_PREVENCION_FRAUDE`
+> (`owner: FR_DATA_ENGINEER`, `query_warehouse: WH_APP_XSMALL`). Redeploying
+> (`CREATE OR REPLACE`) still requires fresh human approval.
 
 The app connects through `st.connection("snowflake")` and switches the session
 to `FR_DATA_ENGINEER` when the deployment role allows it (otherwise it keeps
@@ -214,13 +218,21 @@ and reads back the numbers.
 
 | # | Ask / do | Expected result |
 |---|----------|-----------------|
-| 1 | Tool call as `FR_BI_ANALYST`, RUT `5.017.491-3` (retail customer) | `row_count` ≈ 50, every `NUMERO_TARJETA` = `****-****-****-****`, `UNIDAD_NEGOCIO` = `RETAIL` only — **masked + RLS** |
+| 1 | Tool call as `FR_BI_ANALYST`, RUT `5.017.491-3` (retail customer, `limit=100`) | `row_count: 76` (76 rows exist; default `limit=20` returns 20), `RUT` column shows the deterministic pseudonym `***-**-e93d5c93280b`, every `NUMERO_TARJETA` = `****-****-****-****`, `UNIDAD_NEGOCIO` = `RETAIL` only — **masked + RLS + still filterable** |
 | 2 | Same role, RUT `5.000.081-8` (non-retail customer) | `row_count: 0` — the row-access policy hides the customer entirely (45 rows exist) |
-| 3 | Change `SNOWFLAKE_ROLE` to `FR_DEMO_ADMIN`, restart Claude Desktop, repeat 1–2 | plaintext PANs (e.g. `3714-4947-8712-5521`) and 45 rows for `5.000.081-8` — same tool, **zero app changes** |
+| 3 | Change `SNOWFLAKE_ROLE` to `FR_DEMO_ADMIN`, restart Claude Desktop, repeat 1–2 | plaintext RUTs and PANs (e.g. `4111-1119-9180-8125`), `rut_filter: plaintext`, and 45 rows for `5.000.081-8` — same tool, **zero app changes** |
 | 4 | (Optional) ask the agent to read `STAGING_SCHEMA` | fails with `002003` — `FR_BI_ANALYST` holds no staging grants, and the session has secondary roles disabled |
 
-The return payload always echoes `role`, `warehouse` and a `governance` note,
-so the presenter can show *who* answered, not just *what*.
+**Why filtering still works under masking:** Snowflake evaluates `WHERE`
+predicates on the *post-policy* value, so a random mask would return 0 rows
+for every analyst query. The policy is therefore *deterministic*
+(`'***-**-' || right(sha2(val,256),12)`) and the MCP server recomputes the
+same pseudonym client-side — the response's `rut_filter` field tells the
+presenter which filter mode the role used (`deterministic pseudonym …` vs
+`plaintext (admin policy bypass)`).
+
+The return payload always echoes `role`, `warehouse`, `rut_filter` and a
+`governance` note, so the presenter can show *who* answered, not just *what*.
 
 ## Related reading
 

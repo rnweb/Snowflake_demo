@@ -8,7 +8,8 @@ ingestion** and **tested, reproducible transformations**.
 1. Synthetic banking data (modeled on the official Snowflake Quickstarts)
    loaded into `SUPERINTENDENCY_DEMO_DB.STAGING_SCHEMA`
 2. dbt project: staging views → core marts, with 36 data-quality tests
-   (`unique`, `not_null`, `accepted_values`, `relationships`, one singular test)
+   (`unique`, `not_null`, `accepted_values`, `relationships`, one singular
+   test) — dbt reports **41 passes total: 5 models + 36 tests**
 
 ## Naming mapping (Quickstart → banking persona)
 
@@ -20,7 +21,8 @@ ingestion** and **tested, reproducible transformations**.
 
 Core marts keep the **approved** mart names consumed by the governance layer:
 `CORE_BANKING_SCHEMA.CLIENT_PROFILE_DIM` (masked on `RUT`) and
-`CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS` (masked on `NUMERO_TARJETA`).
+`CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS` (masked on `RUT` +
+`NUMERO_TARJETA`).
 
 ## Prerequisites
 
@@ -83,10 +85,10 @@ dbt source freshness --profiles-dir .  # 3/3 sources fresh
 - Core layer (`CORE_BANKING_SCHEMA`): `client_profile_dim` (table),
   `credit_card_transactions` (incremental on `FECHA_TRANSACCION`)
 
-Expected result: **`PASS=41 WARN=0 ERROR=0`** (3 views + 2 marts + 36 tests) and
-**`3/3 sources fresh`**.
+Expected result: **`PASS=41 WARN=0 ERROR=0`** — 41 passes = 5 models
+(3 views + 2 marts) + 36 tests — and **`3/3 sources fresh`**.
 
-## Step 3 — Apache Iceberg lakehouse proof (open formats)
+## Step 3 — Apache Iceberg lakehouse proof (open format, Snowflake-managed)
 
 ```bash
 snowsql -f Demo/SB_Demo/scripts/session-1-lakehouse/sql/03_iceberg_lakehouse_demo.sql
@@ -114,15 +116,19 @@ Verification (expected results):
 Presenter talking points:
 
 - **Open table format:** the table follows the Apache Iceberg spec — metadata
-  in Avro, data in Parquet — so it stays readable by any Iceberg engine
-  (Spark, Athena, Flink, Dremio) with zero vendor lock-in; regulators can
-  audit the data outside Snowflake.
+  in Avro, data in Parquet — so the layout is not proprietary: no data rewrite
+  to leave Snowflake, and any Iceberg engine (Spark, Athena, Flink, Dremio)
+  can read it *once an External Volume* exposes the managed storage. This demo
+  does not provision one (it needs external cloud credentials); external-audit
+  access is shown instead via the open Parquet export below.
 - **Open file format on stage:** the Parquet export on `@ICEBERG_DEMO_STAGE`
   can be read locally with DuckDB/Spark as-is
-  (`duckdb -c "SELECT * FROM 'data_0_0_0.snappy.parquet' LIMIT 10"`).
-- **Managed vs. external:** `CATALOG = 'SNOWFLAKE'` uses Snowflake-managed
-  storage (account-local, no cloud credentials needed); `BASE_LOCATION` is
-  only valid for external volumes — see `governance` notes in Session 3.
+  (`duckdb -c "SELECT * FROM 'data_0_0_0.snappy.parquet' LIMIT 10"`) —
+  the regulator can audit the data outside Snowflake today.
+- **Open format, managed storage:** `CATALOG = 'SNOWFLAKE'` is a
+  Snowflake-*managed* Iceberg table (account-local storage, no cloud
+  credentials needed); `BASE_LOCATION` is only valid for external volumes —
+  a documented future extension.
 - Requires the schema privilege `CREATE ICEBERG TABLE` (granted to
   `FR_DATA_ENGINEER` in `terraform/security.tf`).
 

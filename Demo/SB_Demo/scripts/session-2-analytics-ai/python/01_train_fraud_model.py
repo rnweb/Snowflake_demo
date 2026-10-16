@@ -7,11 +7,22 @@ evaluates it and registers it in the Snowflake Model Registry
 
     SELECT MODEL(<db>.<schema>.DETECTOR_FRAUDES, V1)!predict(<features>) FROM ...;
 
-Role: FR_DATA_ENGINEER | Warehouse: WH_CORTEX_LARGE
+Role: FR_DATA_ENGINEER (override: SNOWFLAKE_ROLE)
+Warehouse: WH_APP_XSMALL (override: SNOWFLAKE_WAREHOUSE) — training only moves
+the mart over the wire and fits client-side; the expensive WH_CORTEX_LARGE is
+reserved for workloads that actually need it (trial-credit guardrail).
 
 Note on labels: the synthetic dataset has no real fraud outcomes, so the
 target ES_FRAUDE is a documented *proxy label* derived from business rules
 (declined/high-value + suspicious category combinations).
+
+Environment (no hardcoded users, accounts or key paths — fail-fast if unset):
+    required : SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER and one of
+               SNOWFLAKE_PRIVATE_KEY_PATH / SNOWFLAKE_PRIVATE_KEY
+    optional : SNOWFLAKE_AUTHENTICATOR (default SNOWFLAKE_JWT),
+               SNOWFLAKE_ROLE, SNOWFLAKE_WAREHOUSE,
+               SNOWFLAKE_DISABLE_OCSP   (default true — OCSP responder is
+               unreachable from the demo network; set false to enforce)
 
 Usage (from the repository root, Python 3.12 venv):
     .venv/Scripts/python Demo/SB_Demo/scripts/session-2-analytics-ai/python/01_train_fraud_model.py
@@ -108,27 +119,50 @@ FROM (SELECT 1 AS MUESTRA)
 """
 
 
-def build_session() -> Session:
-    key_path = os.environ["SNOWFLAKE_PRIVATE_KEY_PATH"]
-    with open(key_path, "rb") as fh:
-        private_key = serialization.load_pem_private_key(fh.read(), password=None).private_bytes(
-            serialization.Encoding.DER,
-            serialization.PrivateFormat.PKCS8,
-            serialization.NoEncryption(),
+def _require_env(name: str) -> str:
+    value = os.getenv(name)
+    if not value:
+        sys.exit(
+            f"missing required environment variable {name} — set it in your "
+            "shell (see 'Environment' in scripts/session-2-analytics-ai/README.md)"
         )
+    return value
+
+
+def build_session() -> Session:
+    key_path = os.getenv("SNOWFLAKE_PRIVATE_KEY_PATH")
+    key_pem = os.getenv("SNOWFLAKE_PRIVATE_KEY")
+    if key_path:
+        with open(key_path, "rb") as fh:
+            pem = fh.read()
+    elif key_pem:
+        pem = key_pem.encode()
+    else:
+        sys.exit(
+            "set SNOWFLAKE_PRIVATE_KEY_PATH (path to your .p8 key) or "
+            "SNOWFLAKE_PRIVATE_KEY (PEM contents) for key-pair authentication"
+        )
+    private_key = serialization.load_pem_private_key(
+        pem, password=None
+    ).private_bytes(
+        serialization.Encoding.DER,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    )
     return Session.builder.configs(
         {
-            "account": os.environ["SNOWFLAKE_ACCOUNT"],
-            "user": os.environ["SNOWFLAKE_USER"],
-            "authenticator": "SNOWFLAKE_JWT",
+            "account": _require_env("SNOWFLAKE_ACCOUNT"),
+            "user": _require_env("SNOWFLAKE_USER"),
+            "authenticator": os.getenv("SNOWFLAKE_AUTHENTICATOR", "SNOWFLAKE_JWT"),
             "private_key": private_key,
-            "role": "FR_DATA_ENGINEER",
-            "warehouse": "WH_CORTEX_LARGE",
+            "role": os.getenv("SNOWFLAKE_ROLE", "FR_DATA_ENGINEER"),
+            "warehouse": os.getenv("SNOWFLAKE_WAREHOUSE", "WH_APP_XSMALL"),
             "database": DB,
             "schema": REGISTRY_SCHEMA,
             "login_timeout": 30,
             "network_timeout": 60,
-            "disable_ocsp_checks": True,
+            "disable_ocsp_checks": os.getenv("SNOWFLAKE_DISABLE_OCSP", "true").lower()
+            in {"1", "true", "yes"},
         }
     ).create()
 
