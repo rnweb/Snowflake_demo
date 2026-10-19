@@ -1,235 +1,254 @@
-# Asset Inventory — Snowflake Platform Demo
+# Session 2 — Analytics, MLOps & GenAI
 
-Master catalogue of **every object provisioned by the demo automation** across the
-three sessions (infrastructure, data, AI and governance). Infrastructure is
-Terraform-managed (`terraform/`); data and logic live
-under `scripts/` and `dbt/`.
+**Audience:** Risk Analysts, Data Scientists & Platform Engineers —
+Superintendency of Banks.
 
-Snapshot verified against the live account on **2026-09-29**, re-verified on
-**2026-10-07** after the security hardening and on **2026-10-15** after the
-third-party audit fixes below (`SHOW` commands and `COUNT(*)` per table — see
-[Verification](#verification)).
+This session shows how the platform moves from *governed data* to
+*operational intelligence*:
 
-## Naming: raw tables vs dbt models
+1. **Snowpark ML** — RandomForest fraud detector trained on the dbt mart and
+   registered in the Snowflake Model Registry (`DETECTOR_FRAUDES`, V1),
+   callable from SQL
+2. **Cortex AI (español)** — `CORTEX.SUMMARIZE`, `CORTEX.TRANSLATE` and
+   `CORTEX.COMPLETE` over the transactional data (Spanish prompts/outputs)
+3. **Streamlit (español)** — *Panel de Prevención de Fraude*: KPIs, charts,
+   model-inference form and a Cortex text box (**deployment requires explicit
+   human approval**; deployed 2026-10-15 via `sql/04_deploy_streamlit.sql`)
+4. **MCP server** — one governed tool (`query_customer_transactions`) that an
+   external AI client (e.g. Claude Desktop) queries over the Model Context
+   Protocol; Snowflake enforces masking + RLS per connecting role
+5. **RAG vector store** — Cortex embeddings + document retrieval in
+   `SUPERINTENDENCY_DEMO_DB.CORTEX_VECTOR_STORE` for vector search and context
+   grounding before generation
 
-| Confusion | Reality |
-|-----------|---------|
-| Raw source tables are **Spanish, UPPERCASE**: `STAGING_SCHEMA.CLIENTES`, `TARJETAS_CREDITO`, `TRANSACCIONES` | Created by Session 1 (`sql/01_create_raw_tables.sql`) in the raw landing schema |
-| dbt models are **lowercase in the project**: `stg_clientes`, `client_profile_dim`, `credit_card_transactions` | Snowflake stores unquoted identifiers uppercase — `CLIENT_PROFILE_DIM` and `credit_card_transactions` in the warehouse |
-| Which schema holds what? | `STAGING_SCHEMA` = raw tables **+** dbt staging views (`STG_*`); `CORE_BANKING_SCHEMA` = dbt marts (`CLIENT_PROFILE_DIM`, `CREDIT_CARD_TRANSACTIONS`); `RISK_ANALYTICS_SCHEMA` = model workbench; `GOVERNANCE_SCHEMA` = policies and role mapping |
+## Files
 
----
+| File | Purpose |
+|------|---------|
+| `python/01_train_fraud_model.py` | Feature SQL, training, evaluation, registry, SQL-inference check |
+| `sql/02_cortex_ai_features.sql`  | Five Cortex / RAG blocks (Spanish) over the mart and the vector store |
+| `sql/04_deploy_streamlit.sql`    | PUT + `CREATE STREAMLIT` (human-gated deploy step; run from repo root with snowsql) |
+| `streamlit_app.py`               | Streamlit app source (Spanish UI) — deployed by `sql/04_deploy_streamlit.sql` after human approval |
+| `python/mcp_server.py`           | stdio MCP server exposing `query_customer_transactions(rut)` for AI clients |
 
-## 1. Infrastructure
+## Prerequisites
 
-**Source of truth:** `terraform/` (`main.tf`, `security.tf`, `governance.tf`,
-`providers.tf`). Provider: `snowflakedb/snowflake ~> 2.21.0`.
+- Infrastructure applied (`cd Demo/SB_Demo/terraform && terraform
+  apply`), including the Session 2 grants:
+  - `CREATE MODEL`, `CREATE FUNCTION` on `RISK_ANALYTICS_SCHEMA`
+    (model registration) — `security.tf`
+  - `USAGE` + `CREATE TABLE` / `CREATE VIEW` / `MODIFY` on
+    `CORTEX_VECTOR_STORE` (vector store) — `security.tf`
+  - `USAGE` on `WH_APP_XSMALL`, `USAGE`+`CREATE STREAMLIT` and stage
+    `READ`/`WRITE` on `CORTEX_NATIVE_APP_DB.PUBLIC` (app deployment)
+- Python **3.12** virtualenv at the repository root (snowflake-ml-python has
+  no Python 3.14 wheels):
 
-### Databases and schemas
+  ```bash
+  py -3.12 -m venv .venv
+  .venv\Scripts\python -m pip install snowflake-ml-python snowflake-snowpark-python scikit-learn streamlit plotly pandas
+  ```
 
-| Object | Provisioned by | Purpose |
-|--------|----------------|---------|
-| `SUPERINTENDENCY_DEMO_DB` | `main.tf` | Demo database (all data/AI/governance objects) |
-| `├── STAGING_SCHEMA` | `main.tf` | **Bronze** — raw ingestion layer and Iceberg external tables: Spanish landing tables + dbt staging views + file format/stages |
-| `├── CORE_BANKING_SCHEMA` | `main.tf` | **Silver/Gold** — curated dbt models, aggregated entities, and governed data (marts + Iceberg lakehouse table) |
-| `├── RISK_ANALYTICS_SCHEMA` | `main.tf` | Data Science workspaces and Snowpark ML models (Model Registry: `DETECTOR_FRAUDES`) |
-| `├── GOVERNANCE_SCHEMA` | `main.tf` | Masking/RLS policies, tag, `ROLE_MAPPING` |
-| `├── CORTEX_VECTOR_STORE` | `main.tf` | Vector embeddings and document chunks for Cortex RAG retrieval |
-| `CORTEX_NATIVE_APP_DB` | `main.tf` | Native App / Streamlit staging area |
-| `└── PUBLIC` | built-in | `STREAMLIT_STAGE` (app source files) |
+- Environment variables (user scope, same as Session 1) — scripts read
+  **only** from the environment (fail-fast, no hardcoded accounts/users/keys):
+  - required: `SNOWFLAKE_ACCOUNT`, `SNOWFLAKE_USER`,
+    `SNOWFLAKE_PRIVATE_KEY_PATH` (or `SNOWFLAKE_PRIVATE_KEY` = PEM contents)
+  - optional: `SNOWFLAKE_AUTHENTICATOR` (default `SNOWFLAKE_JWT`),
+    `SNOWFLAKE_ROLE` (train: `FR_DATA_ENGINEER`, MCP: `FR_BI_ANALYST`),
+    `SNOWFLAKE_WAREHOUSE` (default `WH_APP_XSMALL`),
+    `SNOWFLAKE_DISABLE_OCSP` (default `true` — OCSP responder unreachable
+    from this network; set `false` to enforce OCSP validation)
+- Session 1 executed (the mart `CREDIT_CARD_TRANSACTIONS` must exist)
 
-### Warehouses
+## Step 1 — Train & register the fraud model
 
-| Warehouse | Size | Auto-suspend | Purpose |
-|-----------|------|--------------|---------|
-| `WH_INGESTION_XSMALL` | XSMALL | 60 s | Snowpipe / dbt runs |
-| `WH_CORTEX_LARGE` | LARGE | 120 s | Optional heavy benches only — **no script defaults here** (trial-credit guardrail); runtimes accept `SNOWFLAKE_WAREHOUSE` |
-| `WH_APP_XSMALL` | XSMALL | 60 s | Default compute: Streamlit / Native App, ML training, Cortex SQL, MCP sessions |
+From the repository root:
 
-All created `INITIALLY SUSPENDED`; timeouts 300 s (ingestion/app), 600 s (Cortex).
-
-### Roles and hierarchy
-
-```
-OPERATIONS (key-pair user)
-└── FR_DEMO_ADMIN            # hierarchy root — orchestrates, bypasses policies
-    ├── FR_DATA_ENGINEER     # builds: dbt, Snowpipe, Snowpark, vector store, app deploy
-    └── FR_BI_ANALYST        # reads: masked PII, RLS-filtered rows, document vectors
-FR_TERRAFORM                 # separate IaC-only role (no demo-hierarchy grants)
-```
-
-- **Terraform-managed grants** (`security.tf`): engineer build privileges on
-  staging/core/analytics/vector-store (incl. `CREATE ICEBERG TABLE`, `CREATE MODEL`),
-  analyst read-only `SELECT` on core/analytics/vector-store plus `USAGE` on
-  `CORTEX_NATIVE_APP_DB` — **no staging access** (revoked 2026-10-07) —, warehouse `USAGE`,
-  admin policy authoring (`CREATE MASKING POLICY`/`ROW ACCESS POLICY`/`TAG` on
-  `GOVERNANCE_SCHEMA`), `MODIFY` + `SELECT` on core, DML on governance tables.
-- **Manual bootstrap (not in Terraform, documented in `phase3-next-steps.md`):**
-  `ACCOUNTADMIN` granted `APPLY MASKING POLICY` + `APPLY ROW ACCESS POLICY`
-  (account-level only) to `FR_DEMO_ADMIN`; `FR_TERRAFORM` gets its base grants
-  the same way. Policy **attachment** runs through the aliased
-  `snowflake.policy_author` provider (runs as `FR_DEMO_ADMIN`).
-- No demo role receives `ACCOUNTADMIN`.
-
-### Stages and file formats
-
-| Object | Location | Created by | Purpose |
-|--------|----------|------------|---------|
-| `RAW_STAGE` | `STAGING_SCHEMA` | Session 1 SQL | Raw CSV landing |
-| `RAW_CSV_FORMAT` (CSV) | `STAGING_SCHEMA` | Session 1 SQL | CSV parsing (`SKIP_HEADER=1`) |
-| `ICEBERG_DEMO_STAGE` | `STAGING_SCHEMA` | Session 1 `03_iceberg…` | Parquet source for the Iceberg table |
-| `STREAMLIT_STAGE` | `CORTEX_NATIVE_APP_DB.PUBLIC` | `main.tf` | App source files (deployed via `session-2/sql/04_deploy_streamlit.sql`, human-gated) |
-
----
-
-## 2. Data assets — staging (raw + lakehouse)
-
-| Object (exact name) | Type | Rows | Created by |
-|---------------------|------|------|------------|
-| `SUPERINTENDENCY_DEMO_DB.STAGING_SCHEMA.CLIENTES` | table | 600 | Session 1 + synthetic loader |
-| `…STAGING_SCHEMA.TARJETAS_CREDITO` | table | 928 | Session 1 + synthetic loader |
-| `…STAGING_SCHEMA.TRANSACCIONES` | table | 18 000 | Session 1 + synthetic loader |
-| `…STAGING_SCHEMA.STG_CLIENTES` | view | — | dbt (`staging/stg_clientes.sql`) |
-| `…STAGING_SCHEMA.STG_TARJETAS_CREDITO` | view | — | dbt (`staging/stg_tarjetas_credito.sql`) |
-| `…STAGING_SCHEMA.STG_TRANSACCIONES` | view | — | dbt (`staging/stg_transacciones.sql`) |
-| `…CORE_BANKING_SCHEMA.HISTORICO_TRANSACCIONES_ICEBERG` | **Iceberg table** | 18 000 | Session 1 `03_iceberg_lakehouse_demo.sql` |
-
-- Iceberg table: **open-format, Snowflake-managed** (`CATALOG='SNOWFLAKE'` —
-  Iceberg spec files on Snowflake storage, loaded from Parquet on
-  `ICEBERG_DEMO_STAGE`, 3 files, 518 744 bytes); row parity with the raw mart
-  verified (`is_iceberg='Y'`). Reading it from *external* engines would need an
-  **External Volume** (cloud-storage credentials) — a documented future
-  extension, not provisioned in this demo.
-- No masking or RLS policies are attached to this layer — and since the
-  2026-10-07 hardening `FR_BI_ANALYST` has **no access here at all**
-  ([scope notes](#scope-notes)); raw tables are reachable by
-  `FR_DEMO_ADMIN`/`FR_DATA_ENGINEER` only.
-
----
-
-## 3. Data assets — core (dbt marts + policy data)
-
-| Object (exact name) | Type | Rows | Created by | Governance |
-|---------------------|------|------|------------|------------|
-| `…CORE_BANKING_SCHEMA.CLIENT_PROFILE_DIM` | table (dbt `client_profile_dim`) | 600 | `dbt build` | `RUT` → `MASK_NATIONAL_ID` |
-| `…CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS` | incremental (dbt `credit_card_transactions`) | 18 000 | `dbt build` | `RUT` → `MASK_NATIONAL_ID` (deterministic); `NUMERO_TARJETA` → `MASK_CREDIT_CARD` (deterministic); `UNIDAD_NEGOCIO` → `RLS_BUSINESS_UNIT` |
-| `…GOVERNANCE_SCHEMA.ROLE_MAPPING` | table | 4 | `governance.tf` DDL + Session 3 seed | RLS lookup: role → business unit |
-| `…CORTEX_VECTOR_STORE.DOCUMENTS` | table | demo set | Session 2 SQL | embeddings and vector search context |
-
-Mart facts: `UNIDAD_NEGOCIO` = PYME 6 223 / CORPORATIVO 5 928 / RETAIL 5 849;
-`ESTADO` = APROBADA 15 282 / RECHAZADA 1 851 / PENDIENTE 867.
-
----
-
-## 4. Analytics & AI
-
-| Asset | Detail |
-|-------|--------|
-| **Model** `SUPERINTENDENCY_DEMO_DB.RISK_ANALYTICS_SCHEMA.DETECTOR_FRAUDES` (V1) | RandomForest fraud detector, trained by `session-2/python/01_train_fraud_model.py` on the mart; features `MONTO`, `HORA`, `DIA_SEMANA`, `FIN_DE_SEMANA`, `CATEGORIA_ALTO_RIESGO`, `UNIDAD_NEGOCIO_COD`; evaluation: `EVALUADOS=3651 ACCURACY=0.9310 RECALL=0.4404 PRECISION=0.7608` |
-| **Cortex AI** (5 blocks, `session-2/sql/02_cortex_ai_features.sql`) | `SNOWFLAKE.CORTEX.SUMMARIZE`, `SNOWFLAKE.CORTEX.TRANSLATE`, `SNOWFLAKE.CORTEX.COMPLETE` ×2, and the `CORTEX_VECTOR_STORE` retrieval block for RAG context |
-| **Streamlit** `PANEL_PREVENCION_FRAUDE` | Source: `session-2/streamlit_app.py` (Spanish UI: KPIs, charts, model-inference form, Cortex text box). **Deployed 2026-10-15** via `session-2/sql/04_deploy_streamlit.sql` after explicit human approval |
-| **MCP server** (C06-PRE-06 & C06-AE-08) | `session-2/python/mcp_server.py` — stdio Model Context Protocol server exposing `query_customer_transactions(rut)` over `CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS` with masking + RLS in Snowflake |
-
----
-
-## 5. Governance
-
-### Policies and tags (`governance.tf`, owned by `FR_DEMO_ADMIN`)
-
-| Object | Type | Attached to | Effect |
-|--------|------|-------------|--------|
-| `MASK_NATIONAL_ID` | masking policy | `CORE_BANKING_SCHEMA.CLIENT_PROFILE_DIM.RUT` + `CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS.RUT` (2 applications) | deterministic `***-**-<12 hex>` pseudonym for non-admin roles |
-| `MASK_CREDIT_CARD` | masking policy | `CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS.NUMERO_TARJETA` | `****-****-****-****` for non-admin roles |
-| `RLS_BUSINESS_UNIT` | row-access policy | `CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS.UNIDAD_NEGOCIO` | Row filter via `GOVERNANCE_SCHEMA.ROLE_MAPPING` (bound by Session 3 SQL — one-shot attachment to the mart) |
-| `DATA_CLASSIFICATION` | tag | `CLIENT_PROFILE_DIM.RUT`, `CREDIT_CARD_TRANSACTIONS.NUMERO_TARJETA` (domain `COLUMN`) | Horizon label `= 'PII'` (set by Session 3 `03_object_tagging_demo.sql`) |
-
-Attachment switch: `terraform/terraform.tfvars` → `attach_policies_to_tables = true`
-(**3 column-policy applications** via `snowflake.policy_author`:
-`dim.RUT`, `fact.RUT`, `fact.NUMERO_TARJETA`).
-
-### Verified access matrix
-
-| Persona | PII (`RUT` / `NUMERO_TARJETA`) | Transaction rows | Build objects |
-|---------|-------------------------------|------------------|---------------|
-| `FR_DEMO_ADMIN` / `ACCOUNTADMIN` | plaintext (policy bypass) | 18 000 (PYME+CORPORATIVO+RETAIL) | yes |
-| `FR_DATA_ENGINEER` | pseudonym `***-**-<12 hex>` / masked `****-****-****-****` | 18 000 (all units — dbt/ML keep working) | yes |
-| `FR_BI_ANALYST` | pseudonym `***-**-<12 hex>` / masked `****-****-****-****` | 5 849 (RETAIL only) | no (read-only) |
-
-Policy subqueries run with the policy owner's privileges, so `FR_BI_ANALYST`
-needs **no** governance grants of its own.
-
-### Scope notes
-
-- **Gap closed (2026-10-07).** Raw tables (`STAGING_SCHEMA.CLIENTES.RUT`, …)
-  carry no masking policies, and `FR_BI_ANALYST` used to hold `SELECT` there —
-  which would have bypassed the Dynamic Data Masking narrative. Terraform
-  (`security.tf`) now **revokes** the analyst's `USAGE`/`SELECT` on
-  `STAGING_SCHEMA` (resources `analyst_staging_read`,
-  `analyst_staging_select_all`, `analyst_staging_select_future` removed);
-  verified live: `SHOW GRANTS TO ROLE FR_BI_ANALYST` returns **no STAGING
-  entries**. The analyst reads `CORE_BANKING_SCHEMA`, `RISK_ANALYTICS_SCHEMA`,
-  `CORTEX_VECTOR_STORE`, and `CORTEX_NATIVE_APP_DB` only; masking stays attached to the two core-mart
-  columns.
-- **Session isolation (2026-10-07).** The revocation alone was not enough: the
-  operator user `OPERATIONS` also holds `FR_DEMO_ADMIN`/`FR_TERRAFORM`, and
-  Snowflake activates every role of a user as a *secondary* role by default —
-  so an `FR_BI_ANALYST` session still inherited `FR_DATA_ENGINEER`'s staging
-  privileges through the hierarchy. Persona sessions now run
-  `USE SECONDARY ROLES NONE` (`scripts/session-3-governance/sql/02_verify_masking_rls.sql`,
-  `scripts/session-2-analytics-ai/python/mcp_server.py`); verified live:
-  `SELECT COUNT(*) …STAGING_SCHEMA.CLIENTES` **fails with `002003`** for the
-  isolated analyst session while the core mart stays readable (5 849 RETAIL
-  rows).
-- **Fact-table RUT masked (2026-10-15 audit).** `CREDIT_CARD_TRANSACTIONS.RUT`
-  previously exposed plaintext PII while the dim column was masked (same
-  audit issue as the raw-layer gap). The column is now attached to
-  `MASK_NATIONAL_ID`, and the policy body was changed from a constant
-  `***-**-****` to a **deterministic** token: Snowflake applies `WHERE` to the
-  *post-policy* value, so a constant mask broke every analyst filter
-  (plaintext `WHERE RUT='5.017.491-3'` → 0 rows) while the token form
-  (`WHERE RUT='***-**-e93d5c93280b'` → 76 rows) keeps queries working.
-  `mcp_server.py` mirrors the policy (`sha256(rut)[-12:]`) so non-admin MCP
-  sessions filter by the pseudonym and admins by plaintext — verified live
-  for both personas (2026-10-15).
-- **MCP pseudonymized filter (hash-based).** The agent never sees the plaintext
-  `RUT` for restricted roles. The server computes a stable hash for the
-  customer identifier and Snowflake applies the same deterministic token to the
-  row policy, which keeps the analyst query working while the visible dataset is
-  restricted to `UNIDAD_NEGOCIO = 'RETAIL'`.
-- Schema `COMMENT`s follow the Medallion wording in `terraform/main.tf`
-  (Bronze / Silver-Gold / Data Science) and were applied to the live schemas
-  on 2026-10-07.
-
-## Verification
-
-Run as `FR_DEMO_ADMIN` on `WH_APP_XSMALL`:
-
-```sql
-SHOW TERSE TABLES IN DATABASE SUPERINTENDENCY_DEMO_DB;
-SHOW MASKING POLICIES IN DATABASE SUPERINTENDENCY_DEMO_DB;
-SHOW ROW ACCESS POLICIES IN DATABASE SUPERINTENDENCY_DEMO_DB;
-SHOW TAGS IN DATABASE SUPERINTENDENCY_DEMO_DB;
-SHOW MODELS IN SCHEMA SUPERINTENDENCY_DEMO_DB.RISK_ANALYTICS_SCHEMA;
-SHOW STREAMLITS IN DATABASE CORTEX_NATIVE_APP_DB;  -- PANEL_PREVENCION_FRAUDE (deployed)
-SHOW GRANTS TO ROLE FR_BI_ANALYST;  -- must contain no STAGING_SCHEMA entries
-SELECT COUNT(*) FROM SUPERINTENDENCY_DEMO_DB.STAGING_SCHEMA.TRANSACCIONES;      -- 18000
-SELECT COUNT(*) FROM SUPERINTENDENCY_DEMO_DB.CORE_BANKING_SCHEMA.CLIENT_PROFILE_DIM; -- 600
-SELECT COUNT(*) FROM SUPERINTENDENCY_DEMO_DB.CORTEX_VECTOR_STORE.DOCUMENTS;    -- demo rows available
+```bash
+.venv\Scripts\python -u Demo/SB_Demo/scripts/session-2-analytics-ai/python/01_train_fraud_model.py
 ```
 
-Persona isolation check (as `FR_BI_ANALYST`):
+Expected output (role `FR_DATA_ENGINEER`, warehouse `WH_APP_XSMALL` — the
+small default keeps trial credits safe; override with `SNOWFLAKE_WAREHOUSE`,
+e.g. `WH_CORTEX_LARGE` for parallel training benches):
 
-```sql
-USE SECONDARY ROLES NONE;                                                  -- see scope notes
-SELECT COUNT(*) FROM SUPERINTENDENCY_DEMO_DB.STAGING_SCHEMA.CLIENTES;      -- must FAIL: 002003
-SELECT COUNT(*) FROM SUPERINTENDENCY_DEMO_DB.CORTEX_VECTOR_STORE.DOCUMENTS; -- should succeed (read-only schema access)
+```
+[1/5] connected as FR_DATA_ENGINEER on WH_APP_XSMALL
+[2/5] mart loaded: 18000 rows, 1675 proxy-fraud labels
+[3/5] RandomForest trained (80/20 split, seed=42)
+[4/5] evaluation: EVALUADOS=3651 ACCURACY=0.9310 RECALL=0.4404 PRECISION=0.7608
+[5/5] registered SUPERINTENDENCY_DEMO_DB.RISK_ANALYTICS_SCHEMA.DETECTOR_FRAUDES (V1)
+
+--- SQL inference example (model is callable from SQL) ---
+SELECT MODEL(SUPERINTENDENCY_DEMO_DB.RISK_ANALYTICS_SCHEMA.DETECTOR_FRAUDES, V1)!predict(
+    MONTO => 480000, HORA => 2, DIA_SEMANA => 6, FIN_DE_SEMANA => 1,
+    CATEGORIA_ALTO_RIESGO => 1, UNIDAD_NEGOCIO_COD => 1
+) AS PREDICCION
+FROM (SELECT 1 AS MUESTRA)
+result: Row(PREDICCION='... "PRED_ES_FRAUDE": 1 ...')
 ```
 
-Persona proofs live in `scripts/session-3-governance/sql/02_verify_masking_rls.sql`.
+Notes for the presenter (all handled inside the script):
 
-## Related documentation
+- **Label**: the synthetic data has no real fraud outcomes, so `ES_FRAUDE` is
+  a documented *proxy label* (declined ≥ 250 000 or any ≥ 400 000 with
+  suspicious category rules).
+- **pyarrow**: the sklearn model specification omits `pyarrow` from the
+  temporary training procedure's package list; the script injects the
+  channel-supported `pyarrow==18.1.0` (see comment in the script).
+- **OCSP**: connections set `disable_ocsp_checks=True` because the OCSP
+  responder is unreachable from this network (otherwise `connect()` hangs).
+- **Windows encoding**: stdout/stderr are forced to UTF-8 so the ❌/✔ markers
+  of `snowflake-ml-python` progress bars cannot mask real errors.
+- Re-running is safe: a second run reports
+  `registration skipped` if version `V1` already exists.
 
-- Demo overview & workflow: [`README.md`](README.md)
-- Architecture & guardrails: [RF_IT docs](https://github.com/rnweb/RF_IT_Solutions/blob/main/docs/snowflake-platform-demo/architecture.md)
-- Session 3 (presenter guide): [`scripts/session-3-governance/README.md`](scripts/session-3-governance/README.md)
+## Step 2 — Cortex AI in Spanish
+
+`sql/02_cortex_ai_features.sql` contains five blocks (comments and output in
+Spanish):
+
+1. `SNOWFLAKE.CORTEX.SUMMARIZE` — resumen ejecutivo de las transacciones ≥
+   400 000 (lista de 30, LISTAGG)
+2. `SNOWFLAKE.CORTEX.TRANSLATE` — encabezado de informe ES → EN
+3. `SNOWFLAKE.CORTEX.COMPLETE('llama3.1-70b', …)` — veredicto de riesgo
+   `RIESGO: ALTO|MEDIO|BAJO` con contexto de las 10 peores transacciones
+   (patrón RAC sobre el mart, sin embeddings)
+4. `SNOWFLAKE.CORTEX.COMPLETE('llama3.1-8b', …)` — extracción estructurada
+   JSON para un sistema de alertas
+5. `CORTEX_VECTOR_STORE` RAG block — embeddings, vector retrieval and a
+   `CORTEX.EXTRACT_ANSWER(context, question)` example grounded in retrieved
+   context
+
+Run them from a Snowsight worksheet (or any SQL client) as
+**`FR_DATA_ENGINEER`** on **`WH_APP_XSMALL`** (or `WH_CORTEX_LARGE` when the
+account has credits to spare — never the default).
+
+> **Limitación de la cuenta demo:** esta cuenta es de prueba (*trial*) y
+> Snowflake devuelve `399258 (0A000): AI function ... is not available for
+> trial accounts` para las tres funciones. Los cinco bloques están
+> verificadas: compilan, resuelven la función y solo chocan con esa puerta de
+> licencia. En una cuenta estándar producen los textos descritos arriba. El
+> resto de la demo (datos, RBAC, modelo ML, app) no depende de Cortex.
+
+## Step 3 — Streamlit app (human approval required)
+
+`streamlit_app.py` (todo el texto de la interfaz en español):
+
+- KPIs: transacciones, monto total, rechazadas, alertas de riesgo
+- Gráficos: monto por categoría (barras), distribución por estado (donut),
+  evolución mensual (línea)
+- Tabla de las 20 transacciones de mayor monto (sin columnas sensibles)
+- **Evaluador de riesgo**: formulario que invoca
+  `MODEL(..., V1)!predict(...)` desde SQL y muestra ALERTA / sin alerta
+- **Resumen con Cortex**: caja de texto → `CORTEX.SUMMARIZE` (aviso amable en
+  cuentas trial)
+
+> 🚧 **Guardrail:** the automation never deploys apps. After explicit human
+> review and approval of `streamlit_app.py`, the presenter runs
+> `sql/04_deploy_streamlit.sql` from the repository root with snowsql (`PUT`
+> is a client command — it does not run in a Snowsight worksheet) as
+> **`FR_DATA_ENGINEER`**. **Deployed 2026-10-15**: `SHOW STREAMLITS IN
+> DATABASE CORTEX_NATIVE_APP_DB` returns `PANEL_PREVENCION_FRAUDE`
+> (`owner: FR_DATA_ENGINEER`, `query_warehouse: WH_APP_XSMALL`). Redeploying
+> (`CREATE OR REPLACE`) still requires fresh human approval.
+
+The app connects through `st.connection("snowflake")` and switches the session
+to `FR_DATA_ENGINEER` when the deployment role allows it (otherwise it keeps
+the deployment role's privileges).
+
+## Step 4 — MCP server for an external AI agent (C06-PRE-06 & C06-AE-08)
+
+`python/mcp_server.py` exposes a single tool over stdio:
+
+```
+query_customer_transactions(rut, limit=20)  →  rows of
+SUPERINTENDENCY_DEMO_DB.CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS
+```
+
+The tool opens a fresh Snowflake session per call using only environment
+variables (no credentials in code) and runs `USE SECONDARY ROLES NONE`, so the
+agent sees **exactly** the configured role — masking and row-level security are
+enforced inside Snowflake, never by the agent.
+
+Install the protocol library (once, into the same virtualenv as Step 1):
+
+```bash
+.venv\Scripts\python -m pip install mcp
+```
+
+Run manually (stdio transport; the MCP client spawns it for you):
+
+```bash
+set SNOWFLAKE_ACCOUNT=RBGXIGI-UAC53151
+set SNOWFLAKE_USER=OPERATIONS
+set SNOWFLAKE_AUTHENTICATOR=SNOWFLAKE_JWT
+set SNOWFLAKE_PRIVATE_KEY_PATH=%USERPROFILE%\rsa_key.p8
+set SNOWFLAKE_ROLE=FR_BI_ANALYST
+set SNOWFLAKE_WAREHOUSE=WH_APP_XSMALL
+.venv\Scripts\python -u Demo/SB_Demo/scripts/session-2-analytics-ai/python/mcp_server.py
+```
+
+`SNOWFLAKE_ROLE` defaults to `FR_BI_ANALYST` and `SNOWFLAKE_WAREHOUSE` to
+`WH_APP_XSMALL`; the MCP server always reads from
+`CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS`.
+
+### Connect Claude Desktop
+
+Add to the `mcpServers` block of Claude Desktop's config
+(`claude_desktop_config.json` — path per the
+[Anthropic docs](https://support.claude.com/en/articles/11175166-getting-started-using-mcp-with-claude-desktop)):
+
+```json
+{
+  "mcpServers": {
+    "snowflake-demo": {
+      "command": "C:\\path\\to\\.venv\\Scripts\\python.exe",
+      "args": ["-u", "Demo/SB_Demo/scripts/session-2-analytics-ai/python/mcp_server.py"],
+      "env": {
+        "SNOWFLAKE_ACCOUNT": "RBGXIGI-UAC53151",
+        "SNOWFLAKE_USER": "OPERATIONS",
+        "SNOWFLAKE_AUTHENTICATOR": "SNOWFLAKE_JWT",
+        "SNOWFLAKE_PRIVATE_KEY_PATH": "C:\\Users\\<you>\\rsa_key.p8",
+        "SNOWFLAKE_ROLE": "FR_BI_ANALYST",
+        "SNOWFLAKE_WAREHOUSE": "WH_APP_XSMALL"
+      }
+    }
+  }
+}
+```
+
+Restart Claude Desktop, then in the chat ask e.g.
+**«¿Cuántas transacciones tiene el RUT 5.017.491-3?»** — Claude calls the tool
+and reads back the numbers.
+
+### Presenter demo script (governed vs. plaintext)
+
+| # | Ask / do | Expected result |
+|---|----------|-----------------|
+| 1 | Tool call as `FR_BI_ANALYST`, RUT `5.017.491-3` (retail customer, `limit=100`) | `row_count: 76` (76 rows exist; default `limit=20` returns 20), `RUT` column shows the deterministic pseudonym, and the customer is within the retail slice |
+| 2 | Same role, RUT `5.000.081-8` (non-retail customer) | `row_count: 0` — the row-access policy hides the customer entirely (45 rows exist) |
+| 3 | Change `SNOWFLAKE_ROLE` to `FR_DEMO_ADMIN`, restart Claude Desktop, repeat 1–2 | plaintext RUTs and PANs (e.g. `4111-1119-9180-8125`), `rut_filter: plaintext`, and 45 rows for `5.000.081-8` |
+| 4 | (Optional) ask the agent to read `STAGING_SCHEMA` | fails with `002003` — `FR_BI_ANALYST` holds no staging grants, and the session has secondary roles disabled |
+
+**Expected MCP governance checks:**
+- `NUMERO_TARJETA` must be masked as `****-****-****-****` for the analyst role;
+- `query_customer_transactions(rut)` must return only `UNIDAD_NEGOCIO = 'RETAIL'` rows for `FR_BI_ANALYST`;
+- when the role is changed to `FR_DEMO_ADMIN`, the same query returns plaintext RUTs/PANs and the full customer set.
+
+**Why filtering still works under masking:** Snowflake evaluates `WHERE`
+predicates on the *post-policy* value, so a random mask would return 0 rows
+for every analyst query. The policy is therefore *deterministic*
+(`'***-**-' || right(sha2(val,256),12)`) and the MCP server recomputes the
+same pseudonym client-side — the response's `rut_filter` field tells the
+presenter which filter mode the role used (`deterministic pseudonym …` vs
+`plaintext (admin policy bypass)`).
+
+The return payload always echoes `role`, `warehouse`, `rut_filter` and a
+`governance` note, so the presenter can show *who* answered, not just *what*.
+
+## Related reading
+
+- Session 1 (data foundation): `../session-1-lakehouse/README.md`
+- Execution order & guardrails: `../../prompts/03-execution-validation.md`
 
