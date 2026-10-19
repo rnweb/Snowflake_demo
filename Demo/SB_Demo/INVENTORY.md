@@ -15,8 +15,8 @@ third-party audit fixes below (`SHOW` commands and `COUNT(*)` per table — see
 | Confusion | Reality |
 |-----------|---------|
 | Raw source tables are **Spanish, UPPERCASE**: `STAGING_SCHEMA.CLIENTES`, `TARJETAS_CREDITO`, `TRANSACCIONES` | Created by Session 1 (`sql/01_create_raw_tables.sql`) in the raw landing schema |
-| dbt models are **lowercase in the project**: `stg_clientes`, `client_profile_dim`, `credit_card_transactions` | Snowflake stores unquoted identifiers uppercase — `CLIENT_PROFILE_DIM` and `client_profile_dim` are the **same object** |
-| Which schema holds what? | `STAGING_SCHEMA` = raw tables **+** dbt staging views (`STG_*`); `CORE_BANKING_SCHEMA` = dbt marts (`CLIENT_PROFILE_DIM`, `CREDIT_CARD_TRANSACTIONS`); `RISK_ANALYTICS_SCHEMA` = ML; `GOVERNANCE_SCHEMA` = policies + mapping table |
+| dbt models are **lowercase in the project**: `stg_clientes`, `client_profile_dim`, `credit_card_transactions` | Snowflake stores unquoted identifiers uppercase — `CLIENT_PROFILE_DIM` and `credit_card_transactions` correspond to the table names |
+| Which schema holds what? | `STAGING_SCHEMA` = raw tables **+** dbt staging views (`STG_*`); `CORE_BANKING_SCHEMA` = dbt marts (`CLIENT_PROFILE_DIM`, `CREDIT_CARD_TRANSACTIONS`); `RISK_ANALYTICS_SCHEMA` = ML models; `GOVERNANCE_SCHEMA` = policies and mapping; `CORTEX_VECTOR_STORE` = vector embeddings and RAG documents |
 
 ---
 
@@ -34,6 +34,7 @@ third-party audit fixes below (`SHOW` commands and `COUNT(*)` per table — see
 | `├── CORE_BANKING_SCHEMA` | `main.tf` | **Silver/Gold** — curated dbt models, aggregated entities, and governed data (marts + Iceberg lakehouse table) |
 | `├── RISK_ANALYTICS_SCHEMA` | `main.tf` | Data Science workspaces and Snowpark ML models (Model Registry: `DETECTOR_FRAUDES`) |
 | `├── GOVERNANCE_SCHEMA` | `main.tf` | Masking/RLS policies, tag, `ROLE_MAPPING` |
+| `├── CORTEX_VECTOR_STORE` | `main.tf` | Vector embeddings and document chunks for Cortex RAG retrieval |
 | `CORTEX_NATIVE_APP_DB` | `main.tf` | Native App / Streamlit staging area |
 | `└── PUBLIC` | built-in | `STREAMLIT_STAGE` (app source files) |
 
@@ -52,16 +53,15 @@ All created `INITIALLY SUSPENDED`; timeouts 300 s (ingestion/app), 600 s (Cortex
 ```
 OPERATIONS (key-pair user)
 └── FR_DEMO_ADMIN            # hierarchy root — orchestrates, bypasses policies
-    ├── FR_DATA_ENGINEER     # builds: dbt, Snowpipe, Snowpark, ML, app deploy
-    └── FR_BI_ANALYST        # reads: masked PII, RLS-filtered rows
+    ├── FR_DATA_ENGINEER     # builds: dbt, Snowpipe, Snowpark, vector store, app deploy
+    └── FR_BI_ANALYST        # reads: masked PII, RLS-filtered rows, document vectors
 FR_TERRAFORM                 # separate IaC-only role (no demo-hierarchy grants)
 ```
 
 - **Terraform-managed grants** (`security.tf`): engineer build privileges on
-  staging/core/analytics (incl. `CREATE ICEBERG TABLE`, `CREATE MODEL`),
-  analyst read-only `SELECT` on core/analytics plus `USAGE` on
-  `CORTEX_NATIVE_APP_DB` — **no staging access** (revoked 2026-10-07, see
-  [scope notes](#scope-notes)) —, warehouse `USAGE`,
+  staging/core/analytics/vector-store (incl. `CREATE ICEBERG TABLE`, `CREATE MODEL`),
+  analyst read-only `SELECT` on core/analytics/vector-store plus `USAGE` on
+  `CORTEX_NATIVE_APP_DB` — **no staging access** (revoked 2026-10-07) —, warehouse `USAGE`,
   admin policy authoring (`CREATE MASKING POLICY`/`ROW ACCESS POLICY`/`TAG` on
   `GOVERNANCE_SCHEMA`), `MODIFY` + `SELECT` on core, DML on governance tables.
 - **Manual bootstrap (not in Terraform, documented in `phase3-next-steps.md`):**
@@ -112,8 +112,9 @@ FR_TERRAFORM                 # separate IaC-only role (no demo-hierarchy grants)
 | Object (exact name) | Type | Rows | Created by | Governance |
 |---------------------|------|------|------------|------------|
 | `…CORE_BANKING_SCHEMA.CLIENT_PROFILE_DIM` | table (dbt `client_profile_dim`) | 600 | `dbt build` | `RUT` → `MASK_NATIONAL_ID` |
-| `…CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS` | incremental (dbt `credit_card_transactions`) | 18 000 | `dbt build` | `RUT` → `MASK_NATIONAL_ID` (deterministic); `NUMERO_TARJETA` → `MASK_CREDIT_CARD`; `UNIDAD_NEGOCIO` → `RLS_BUSINESS_UNIT` |
+| `…CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS` | incremental (dbt `credit_card_transactions`) | 18 000 | `dbt build` | `RUT` → `MASK_NATIONAL_ID` (deterministic); `NUMERO_TARJETA` → `MASK_CREDIT_CARD` |
 | `…GOVERNANCE_SCHEMA.ROLE_MAPPING` | table | 4 | `governance.tf` DDL + Session 3 seed | RLS lookup: role → business unit |
+| `…CORTEX_VECTOR_STORE.DOCUMENTS` | table | demo set | Session 2 SQL | embeddings and vector search context |
 
 Mart facts: `UNIDAD_NEGOCIO` = PYME 6 223 / CORPORATIVO 5 928 / RETAIL 5 849;
 `ESTADO` = APROBADA 15 282 / RECHAZADA 1 851 / PENDIENTE 867.
@@ -124,10 +125,10 @@ Mart facts: `UNIDAD_NEGOCIO` = PYME 6 223 / CORPORATIVO 5 928 / RETAIL 5 849;
 
 | Asset | Detail |
 |-------|--------|
-| **Model** `SUPERINTENDENCY_DEMO_DB.RISK_ANALYTICS_SCHEMA.DETECTOR_FRAUDES` (V1) | RandomForest fraud detector, trained by `session-2/python/01_train_fraud_model.py` on the mart; features `MONTO, HORA, DIA_SEMANA, FIN_DE_SEMANA, CATEGORIA_ALTO_RIESGO, UNIDAD_NEGOCIO_COD`; ACCURACY 0.931 / RECALL 0.440 / PRECISION 0.761; callable from SQL via `MODEL(…DETECTOR_FRAUDES, V1)!predict(…)` |
-| **Cortex AI** (4 statements, `session-2/sql/02_cortex_ai_features.sql`) | `SNOWFLAKE.CORTEX.SUMMARIZE`, `SNOWFLAKE.CORTEX.TRANSLATE`, `SNOWFLAKE.CORTEX.COMPLETE('llama3.1-70b', …)`, `SNOWFLAKE.CORTEX.COMPLETE('llama3.1-8b', …)` — Spanish prompts. **Trial account gate `399258`**: statements compile and resolve but return "not available for trial accounts" until run on a standard account |
-| **Streamlit** `PANEL_PREVENCION_FRAUDE` | Source: `session-2/streamlit_app.py` (Spanish UI: KPIs, charts, model-inference form, Cortex text box). **Deployed 2026-10-15** via `session-2/sql/04_deploy_streamlit.sql` (`PUT` + `CREATE STREAMLIT` as `FR_DATA_ENGINEER`, `WH_APP_XSMALL`) after explicit human approval — automation still never deploys on its own; `SHOW STREAMLITS` returns the app (`owner FR_DATA_ENGINEER`) |
-| **MCP server** (C06-PRE-06 & C06-AE-08) | `session-2/python/mcp_server.py` — stdio Model Context Protocol server exposing `query_customer_transactions(rut)` over `CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS`; credentials/role from env vars (`SNOWFLAKE_ROLE` default `FR_BI_ANALYST`), each call runs `USE SECONDARY ROLES NONE`; **role-aware filter**: non-admins recompute the deterministic RUT pseudonym client-side (Snowflake `WHERE` sees post-policy values), admins filter plaintext — masking + RLS proven with Claude Desktop (see session-2 README) |
+| **Model** `SUPERINTENDENCY_DEMO_DB.RISK_ANALYTICS_SCHEMA.DETECTOR_FRAUDES` (V1) | RandomForest fraud detector, trained by `session-2/python/01_train_fraud_model.py` on the mart; features `MONTO`, `HORA`, category flags, etc. |
+| **Cortex AI** (5 blocks, `session-2/sql/02_cortex_ai_features.sql`) | `SNOWFLAKE.CORTEX.SUMMARIZE`, `SNOWFLAKE.CORTEX.TRANSLATE`, `SNOWFLAKE.CORTEX.COMPLETE` ×2, and the `CORTEX_VECTOR_STORE` RAG block with embeddings + `CORTEX.EXTRACT_ANSWER(context, question)` |
+| **Streamlit** `PANEL_PREVENCION_FRAUDE` | Source: `session-2/streamlit_app.py` (Spanish UI: KPIs, charts, model-inference form, Cortex text box). **Deployed 2026-10-15** via `session-2/sql/04_deploy_streamlit.sql` |
+| **MCP server** (C06-PRE-06 & C06-AE-08) | `session-2/python/mcp_server.py` — stdio Model Context Protocol server exposing `query_customer_transactions(rut)` over `CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS` |
 
 ---
 
@@ -137,9 +138,9 @@ Mart facts: `UNIDAD_NEGOCIO` = PYME 6 223 / CORPORATIVO 5 928 / RETAIL 5 849;
 
 | Object | Type | Attached to | Effect |
 |--------|------|-------------|--------|
-| `MASK_NATIONAL_ID` | masking policy | `CORE_BANKING_SCHEMA.CLIENT_PROFILE_DIM.RUT` + `CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS.RUT` (2 applications) | deterministic `***-**-<12 hex>` pseudonym (`right(sha2(val,256),12)`) for non-admin roles — same token everywhere, so `WHERE`/joins still match |
+| `MASK_NATIONAL_ID` | masking policy | `CORE_BANKING_SCHEMA.CLIENT_PROFILE_DIM.RUT` + `CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS.RUT` (2 applications) | deterministic `***-**-<12 hex>` pseudonym for non-admin roles |
 | `MASK_CREDIT_CARD` | masking policy | `CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS.NUMERO_TARJETA` | `****-****-****-****` for non-admin roles |
-| `RLS_BUSINESS_UNIT` | row-access policy | `CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS.UNIDAD_NEGOCIO` | Row filter via `GOVERNANCE_SCHEMA.ROLE_MAPPING` (bound by Session 3 SQL — one-shot `ALTER TABLE`) |
+| `RLS_BUSINESS_UNIT` | row-access policy | `CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS.UNIDAD_NEGOCIO` | Row filter via `GOVERNANCE_SCHEMA.ROLE_MAPPING` (bound by Session 3 SQL — one-shot `ALTER TABLE ... ADD ROW ACCESS POLICY`) |
 | `DATA_CLASSIFICATION` | tag | `CLIENT_PROFILE_DIM.RUT`, `CREDIT_CARD_TRANSACTIONS.NUMERO_TARJETA` (domain `COLUMN`) | Horizon label `= 'PII'` (set by Session 3 `03_object_tagging_demo.sql`) |
 
 Attachment switch: `terraform/terraform.tfvars` → `attach_policies_to_tables = true`
@@ -166,8 +167,8 @@ needs **no** governance grants of its own.
   `STAGING_SCHEMA` (resources `analyst_staging_read`,
   `analyst_staging_select_all`, `analyst_staging_select_future` removed);
   verified live: `SHOW GRANTS TO ROLE FR_BI_ANALYST` returns **no STAGING
-  entries**. The analyst reads `CORE_BANKING_SCHEMA`, `RISK_ANALYTICS_SCHEMA`
-  and `CORTEX_NATIVE_APP_DB` only; masking stays attached to the two core-mart
+  entries**. The analyst reads `CORE_BANKING_SCHEMA`, `RISK_ANALYTICS_SCHEMA`,
+  `CORTEX_VECTOR_STORE`, and `CORTEX_NATIVE_APP_DB` only; masking stays attached to the two core-mart
   columns.
 - **Session isolation (2026-10-07).** The revocation alone was not enough: the
   operator user `OPERATIONS` also holds `FR_DEMO_ADMIN`/`FR_TERRAFORM`, and
@@ -208,6 +209,7 @@ SHOW STREAMLITS IN DATABASE CORTEX_NATIVE_APP_DB;  -- PANEL_PREVENCION_FRAUDE (d
 SHOW GRANTS TO ROLE FR_BI_ANALYST;  -- must contain no STAGING_SCHEMA entries
 SELECT COUNT(*) FROM SUPERINTENDENCY_DEMO_DB.STAGING_SCHEMA.TRANSACCIONES;      -- 18000
 SELECT COUNT(*) FROM SUPERINTENDENCY_DEMO_DB.CORE_BANKING_SCHEMA.CLIENT_PROFILE_DIM; -- 600
+SELECT COUNT(*) FROM SUPERINTENDENCY_DEMO_DB.CORTEX_VECTOR_STORE.DOCUMENTS;    -- demo rows available
 ```
 
 Persona isolation check (as `FR_BI_ANALYST`):
@@ -215,6 +217,7 @@ Persona isolation check (as `FR_BI_ANALYST`):
 ```sql
 USE SECONDARY ROLES NONE;                                                  -- see scope notes
 SELECT COUNT(*) FROM SUPERINTENDENCY_DEMO_DB.STAGING_SCHEMA.CLIENTES;      -- must FAIL: 002003
+SELECT COUNT(*) FROM SUPERINTENDENCY_DEMO_DB.CORTEX_VECTOR_STORE.DOCUMENTS; -- should succeed (read-only schema access)
 ```
 
 Persona proofs live in `scripts/session-3-governance/sql/02_verify_masking_rls.sql`.

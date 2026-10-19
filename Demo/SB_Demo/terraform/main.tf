@@ -41,6 +41,12 @@ resource "snowflake_schema" "governance" {
   comment  = "Masking/row-access policies and role-mapping tables."
 }
 
+resource "snowflake_schema" "vector_store" {
+  database = snowflake_database.demo.name
+  name     = var.schema_vector_store
+  comment  = "Cortex vector store: embeddings, document chunks and RAG retrieval context."
+}
+
 # ---------------------------------------------------------------------------
 # Warehouses
 # ---------------------------------------------------------------------------

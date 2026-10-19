@@ -15,7 +15,7 @@ live in `scripts/session-*` and are executed with the demo roles — never as
 | Layer | Objects |
 |---|---|
 | Databases | `SUPERINTENDENCY_DEMO_DB`, `CORTEX_NATIVE_APP_DB` |
-| Schemas | `CORE_BANKING_SCHEMA`, `STAGING_SCHEMA`, `RISK_ANALYTICS_SCHEMA`, `GOVERNANCE_SCHEMA` |
+| Schemas | `CORE_BANKING_SCHEMA`, `STAGING_SCHEMA`, `RISK_ANALYTICS_SCHEMA`, `GOVERNANCE_SCHEMA`, `CORTEX_VECTOR_STORE` |
 | Warehouses | `WH_INGESTION_XSMALL`, `WH_CORTEX_LARGE`, `WH_APP_XSMALL` |
 | Roles | `FR_DEMO_ADMIN` → (`FR_DATA_ENGINEER`, `FR_BI_ANALYST`) |
 | Governance | `MASK_NATIONAL_ID`, `MASK_CREDIT_CARD`, `RLS_BUSINESS_UNIT`, `ROLE_MAPPING` table (empty) |
@@ -65,10 +65,11 @@ GRANT APPLY ROW ACCESS POLICY ON ACCOUNT TO ROLE FR_DEMO_ADMIN;
    `WH_CORTEX_LARGE` only when credits allow): feature SQL over the dbt mart,
    RandomForest training, evaluation and registration of
    `RISK_ANALYTICS_SCHEMA.DETECTOR_FRAUDES` (V1), callable from SQL.
-2. **Cortex AI (español)** — `sql/02_cortex_ai_features.sql`, four statements
-   (`CORTEX.SUMMARIZE`, `CORTEX.TRANSLATE`, `CORTEX.COMPLETE` ×2) as
-   `FR_DATA_ENGINEER` on `WH_APP_XSMALL`; trial accounts stop at the
-   documented licence gate `399258`.
+2. **Cortex AI (español)** — `sql/02_cortex_ai_features.sql`, five blocks
+   (`CORTEX.SUMMARIZE`, `CORTEX.TRANSLATE`, `CORTEX.COMPLETE` ×2, vector-store
+   RAG with `CORTEX.EXTRACT_ANSWER(context, question)`) as `FR_DATA_ENGINEER`
+   on `WH_APP_XSMALL`; trial accounts stop at the documented licence gate
+   `399258`.
 3. **MCP server — required for the evaluators** — initialize before the demo:
 
    ```bash

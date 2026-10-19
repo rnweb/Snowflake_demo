@@ -94,8 +94,8 @@ SELECT SNOWFLAKE.CORTEX.COMPLETE(
 -- NUEVO BLOQUE (RAG): creación de Vector Type, generación de embeddings y
 -- funciones de búsqueda vetorial (VECTOR_INNER_PRODUCT, CORTEX.EXTRACT_ANSWER)
 -- Este bloque habilita un patrón RAG completo en la cuenta On‑Demand.
-
-CREATE OR REPLACE SCHEMA IF NOT EXISTS SUPERINTENDENCY_DEMO_DB.CORTEX_VECTOR_STORE;
+--
+-- El schema CORTEX_VECTOR_STORE es provisionado por Terraform (IaC), no por SQL.
 
 -- Tabla para almacenar documentos/contexto + embedding (vector)
 -- Usamos el tipo VECTOR nativo de Snowflake para embeddings.
@@ -104,27 +104,22 @@ CREATE OR REPLACE TABLE SUPERINTENDENCY_DEMO_DB.CORTEX_VECTOR_STORE.DOCUMENTS (
     title            STRING,
     content          STRING,
     metadata         VARIANT,
-    embedding        VECTOR,         -- VECTOR (dimensionalidad implícita / dinámica)
+    embedding        VECTOR,
     created_at       TIMESTAMP_LTZ DEFAULT CURRENT_TIMESTAMP
 );
 
 -- -----------------------------------------------------------------------------
 -- RAG - Inserción ejemplar de documentos (demo). Opcional en producción.
 -- -----------------------------------------------------------------------------
--- Inserta algunos documentos de demostración (ejemplo). En producción, deberías
--- llenar esta tabla con chunks del mart, políticas, logs, o extractos relevantes.
 INSERT INTO SUPERINTENDENCY_DEMO_DB.CORTEX_VECTOR_STORE.DOCUMENTS (doc_id, title, content, metadata)
 VALUES
-  ('doc_001', 'Política de monitoreo Retail', 'La unidad Retail tiene reglas de revisión internas para transacciones mayores que establecen pasos de verificación y escalamiento.', OBJECT_CONSTR[...] ),
-  ('doc_002', 'Reporte trimestre Q2',            'Se detectaron transacciones atípicas en el último trimestre en la unidad Retail; se recomienda revisión manual de cuentas con actividad frecuen[...]', OBJECT_CONSTR[...] ),
-  ('doc_003', 'Guía AML',                         'Patrones sospechosos incluyen compras fraccionadas, uso repetido de la misma tarjeta en comercios distintos y transferencias a cuentas de alto r[...]', OBJECT_CONSTR[...] );
+  ('doc_001', 'Política de monitoreo Retail', 'La unidad Retail tiene reglas de revisión internas para transacciones mayores que establecen pasos de verificación y escalamiento.', PARSE_JSON('{"unidad":"Retail","tipo":"politica"}')),
+  ('doc_002', 'Reporte trimestre Q2', 'Se detectaron transacciones atípicas en el último trimestre en la unidad Retail; se recomienda revisión manual de cuentas con actividad frecuente.', PARSE_JSON('{"unidad":"Retail","tipo":"reporte"}')),
+  ('doc_003', 'Guía AML', 'Patrones sospechosos incluyen compras fraccionadas, uso repetido de la misma tarjeta en comercios distintos y transferencias a cuentas de alto riesgo.', PARSE_JSON('{"unidad":"Retail","tipo":"guia"}'));
 
 -- -----------------------------------------------------------------------------
 -- RAG - Generación de embeddings y persistencia en la tabla (indexación)
 -- -----------------------------------------------------------------------------
--- Ajusta el nombre del modelo de embeddings si tu cuenta usa otro. Si la
--- función EMBED devuelve VARIANT/ARRAY en lugar de VECTOR, haz la conversión
--- necesaria (TO_VARIANT o CAST/TRY_CAST). Aquí usamos TRY_CAST por seguridad.
 UPDATE SUPERINTENDENCY_DEMO_DB.CORTEX_VECTOR_STORE.DOCUMENTS d
 SET embedding = (
     TRY_CAST(
@@ -141,8 +136,6 @@ FROM SUPERINTENDENCY_DEMO_DB.CORTEX_VECTOR_STORE.DOCUMENTS;
 -- -----------------------------------------------------------------------------
 -- RAG - Búsqueda vectorial básica: similarity por producto interno (inner product)
 -- -----------------------------------------------------------------------------
--- Ejemplo de consulta: dado un query en texto, generar su embedding y buscar los
--- documentos más similares usando VECTOR_INNER_PRODUCT.
 WITH query_embedding AS (
     SELECT TRY_CAST(SNOWFLAKE.CORTEX.EMBED('text-embedding-3-large',
         'Transacciones sospechosas por montos elevados en Retail durante el ultimo trimestre'
@@ -162,8 +155,6 @@ LIMIT 5;
 -- -----------------------------------------------------------------------------
 -- RAG - Recuperación + generación de respuesta con contexto (CORTEX.COMPLETE)
 -- -----------------------------------------------------------------------------
--- Recuperamos los top-k documentos, concatenamos el contexto y pasamos a
--- CORTEX.COMPLETE para un veredicto en español.
 WITH query AS (
     SELECT 'Analiza el riesgo asociado a la siguiente consulta: transacciones por encima de 400000 en Retail' AS user_question
 ),
@@ -185,7 +176,7 @@ context_concat AS (
     FROM retrieved
 )
 SELECT SNOWFLAKE.CORTEX.COMPLETE(
-    'llama3.1-70b', -- modelo para generación. Ajusta si tu cuenta tiene otro modelo.
+    'llama3.1-70b',
     'Eres un analista de riesgos de la Superintendencia de Bancos. '
     || 'Usa el contexto recuperado para responder en español. Formato exacto: RIESGO: <ALTO|MEDIO|BAJO> - <justificacion corta>. Contexto: '
     || (SELECT context_text FROM context_concat)
@@ -195,14 +186,11 @@ SELECT SNOWFLAKE.CORTEX.COMPLETE(
 -- RAG - Alternativa: usar CORTEX.EXTRACT_ANSWER (si disponible) para respuestas
 -- más dirigidas (pregunta + context stack)
 -- -----------------------------------------------------------------------------
--- Si tu cuenta expone SNOWFLAKE.CORTEX.EXTRACT_ANSWER, se puede usar directamente
--- pasando el contexto recuperado y la pregunta; ejemplo hipotético:
--- (Si la función no existe en tu cuenta, usa el paso anterior con COMPLETE)
+-- La firma real de la función es: CORTEX.EXTRACT_ANSWER(context, question)
 SELECT
     SNOWFLAKE.CORTEX.EXTRACT_ANSWER(
-        'llama3.1-70b',
-        '¿Cuál es el veredicto de riesgo para transacciones > 400000 en Retail? Responde en español con formato: RIESGO: <ALTO|MEDIO|BAJO> - <1 línea>.',
-        (SELECT context_text FROM context_concat)
+        (SELECT context_text FROM context_concat),
+        '¿Cuál es el veredicto de riesgo para transacciones > 400000 en Retail? Responde en español con formato: RIESGO: <ALTO|MEDIO|BAJO> - <1 línea>.'
     ) AS EXTRACTED_ANSWER;
 
 -- -----------------------------------------------------------------------------
