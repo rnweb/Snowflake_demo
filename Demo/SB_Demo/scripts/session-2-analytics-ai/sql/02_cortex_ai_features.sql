@@ -93,9 +93,11 @@ SELECT SNOWFLAKE.CORTEX.COMPLETE(
 -- -----------------------------------------------------------------------------
 -- NUEVO BLOQUE (RAG): creación de Vector Type, generación de embeddings y
 -- funciones de búsqueda vetorial (VECTOR_INNER_PRODUCT, CORTEX.EXTRACT_ANSWER)
--- Este bloque habilita un patrón RAG completo en la cuenta On‑Demand.
+-- Este bloque habilita un patrón RAG completo en la cuenta On-Demand.
 --
 -- El schema CORTEX_VECTOR_STORE es provisionado por Terraform (IaC), no por SQL.
+-- Antes de ejecutar este bloque 5, debes correr `terraform apply` para crear el
+-- schema y evitar el error 002043: "Schema does not exist".
 
 -- Tabla para almacenar documentos/contexto + embedding (vector)
 -- Usamos el tipo VECTOR nativo de Snowflake para embeddings.
@@ -113,9 +115,9 @@ CREATE OR REPLACE TABLE SUPERINTENDENCY_DEMO_DB.CORTEX_VECTOR_STORE.DOCUMENTS (
 -- -----------------------------------------------------------------------------
 INSERT INTO SUPERINTENDENCY_DEMO_DB.CORTEX_VECTOR_STORE.DOCUMENTS (doc_id, title, content, metadata)
 VALUES
-  ('doc_001', 'Política de monitoreo Retail', 'La unidad Retail tiene reglas de revisión internas para transacciones mayores que establecen pasos de verificación y escalamiento.', PARSE_JSON('{"unidad":"Retail","tipo":"politica"}')),
-  ('doc_002', 'Reporte trimestre Q2', 'Se detectaron transacciones atípicas en el último trimestre en la unidad Retail; se recomienda revisión manual de cuentas con actividad frecuente.', PARSE_JSON('{"unidad":"Retail","tipo":"reporte"}')),
-  ('doc_003', 'Guía AML', 'Patrones sospechosos incluyen compras fraccionadas, uso repetido de la misma tarjeta en comercios distintos y transferencias a cuentas de alto riesgo.', PARSE_JSON('{"unidad":"Retail","tipo":"guia"}'));
+  ('doc_001', 'Política de monitoreo Retail', 'La unidad Retail tiene reglas de revisión internas para transacciones mayores que establecen pasos de verificación y escalamiento.', PARSE_JSON('{"category":"risk_policy","unit":"Retail"}')),
+  ('doc_002', 'Reporte trimestre Q2', 'Se detectaron transacciones atípicas en el último trimestre en la unidad Retail; se recomienda revisión manual de cuentas con actividad frecuente.', PARSE_JSON('{"category":"report","unit":"Retail"}')),
+  ('doc_003', 'Guía AML', 'Patrones sospechosos incluyen compras fraccionadas, uso repetido de la misma tarjeta en comercios distintos y transferencias a cuentas de alto riesgo.', PARSE_JSON('{"category":"aml","unit":"Retail"}'));
 
 -- -----------------------------------------------------------------------------
 -- RAG - Generación de embeddings y persistencia en la tabla (indexación)
@@ -123,7 +125,7 @@ VALUES
 UPDATE SUPERINTENDENCY_DEMO_DB.CORTEX_VECTOR_STORE.DOCUMENTS d
 SET embedding = (
     TRY_CAST(
-        SNOWFLAKE.CORTEX.EMBED('text-embedding-3-large', d.content)
+        SNOWFLAKE.CORTEX.EMBED('snowflake-arctic-embed-m-v1.5', d.content)
         AS VECTOR
     )
 )
@@ -137,7 +139,7 @@ FROM SUPERINTENDENCY_DEMO_DB.CORTEX_VECTOR_STORE.DOCUMENTS;
 -- RAG - Búsqueda vectorial básica: similarity por producto interno (inner product)
 -- -----------------------------------------------------------------------------
 WITH query_embedding AS (
-    SELECT TRY_CAST(SNOWFLAKE.CORTEX.EMBED('text-embedding-3-large',
+    SELECT TRY_CAST(SNOWFLAKE.CORTEX.EMBED('snowflake-arctic-embed-m-v1.5',
         'Transacciones sospechosas por montos elevados en Retail durante el ultimo trimestre'
     ) AS VECTOR) AS q_emb
 )
@@ -159,7 +161,7 @@ WITH query AS (
     SELECT 'Analiza el riesgo asociado a la siguiente consulta: transacciones por encima de 400000 en Retail' AS user_question
 ),
 q_emb AS (
-    SELECT TRY_CAST(SNOWFLAKE.CORTEX.EMBED('text-embedding-3-large', user_question) AS VECTOR) AS embedding
+    SELECT TRY_CAST(SNOWFLAKE.CORTEX.EMBED('snowflake-arctic-embed-m-v1.5', user_question) AS VECTOR) AS embedding
     FROM query
 ),
 retrieved AS (
@@ -191,7 +193,7 @@ WITH query AS (
     SELECT 'Analiza el riesgo asociado a la siguiente consulta: transacciones por encima de 400000 en Retail' AS user_question
 ),
 q_emb AS (
-    SELECT TRY_CAST(SNOWFLAKE.CORTEX.EMBED('text-embedding-3-large', user_question) AS VECTOR) AS embedding
+    SELECT TRY_CAST(SNOWFLAKE.CORTEX.EMBED('snowflake-arctic-embed-m-v1.5', user_question) AS VECTOR) AS embedding
     FROM query
 ),
 retrieved AS (
@@ -220,7 +222,7 @@ WITH top1 AS (
     SELECT content
     FROM (
         SELECT d.content, VECTOR_INNER_PRODUCT(d.embedding,
-            TRY_CAST(SNOWFLAKE.CORTEX.EMBED('text-embedding-3-large',
+            TRY_CAST(SNOWFLAKE.CORTEX.EMBED('snowflake-arctic-embed-m-v1.5',
                 'Buscar evidencia sobre transacciones de alto monto en Retail') AS VECTOR)
         ) AS score
         FROM SUPERINTENDENCY_DEMO_DB.CORTEX_VECTOR_STORE.DOCUMENTS d
@@ -241,8 +243,8 @@ SELECT SNOWFLAKE.CORTEX.COMPLETE(
 --   y para crear tablas/actualizar datos en SUPERINTENDENCY_DEMO_DB.
 -- - Si la función EMBED o el tipo VECTOR devuelven otro formato (por ejemplo VARIANT),
 --   ajusta el UPDATE para mapear/convertir: p.ej. embedding = TO_VARIANT(SNOWFLAKE.CORTEX.EMBED(...))
--- - Reemplaza nombres de modelo ('text-embedding-3-large', 'llama3.1-70b', etc.) por
---   los que estén disponibles en tu cuenta.
+-- - Usa modelos nativos de Cortex soportados por la cuenta, como
+--   `snowflake-arctic-embed-m-v1.5` para embeddings y `llama3.1-*` para texto.
 -- - Para producción: chunking de documentos, normalización, control de costos y
 --   refresh incremental (solo embeddings para textos nuevos/actualizados).
 -- -----------------------------------------------------------------------------

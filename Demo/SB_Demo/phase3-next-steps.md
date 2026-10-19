@@ -1,7 +1,7 @@
 # Phase 3 — Next Steps: Data, Logic & App Delivery
 
 > **Status:** Phase 2 (Terraform IaC) is **complete** — `terraform plan` reports
-> *"No changes. Your infrastructure matches the configuration."* (56 resources).
+> *"No changes. Your infrastructure matches the configuration."* (61 resources).
 
 Phase 3 delivers everything Terraform deliberately does **not** manage: data,
 transformation logic and application code. Per the separation of concerns, these
@@ -96,6 +96,11 @@ GRANT APPLY ROW ACCESS POLICY ON ACCOUNT TO ROLE FR_DEMO_ADMIN;
    (`sfguide-getting-started-dataengineering-ml-snowpark-python`),
    `quickstarts/cortex-native-app-chatbot`
    (`sfguide-build-chatbot-with-snowflake-native-app-snowflake-cortex`).
+
+> **Required order / guardrail:** run `terraform apply` before executing the
+> block 5 of `sql/02_cortex_ai_features.sql` (the vector-store schema is created
+> by Terraform). If the schema is missing, Snowflake returns `002043` because
+> `SUPERINTENDENCY_DEMO_DB.CORTEX_VECTOR_STORE` does not exist yet.
 
 ## 3. Session 3 — Governance Activation (`scripts/session-3-governance/`)
 

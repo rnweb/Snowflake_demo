@@ -21,6 +21,11 @@ This session shows how the platform moves from *governed data* to
    `SUPERINTENDENCY_DEMO_DB.CORTEX_VECTOR_STORE` for vector search and context
    grounding before generation
 
+> **Required preparation before the SQL block 5 (vector store):** run
+> `terraform apply` first so the `CORTEX_VECTOR_STORE` schema exists; otherwise
+> Snowflake returns `002043` when the block tries to create or write to the
+> vector-store table.
+
 ## Files
 
 | File | Purpose |
