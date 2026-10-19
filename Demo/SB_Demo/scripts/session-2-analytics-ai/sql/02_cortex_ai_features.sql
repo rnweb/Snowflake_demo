@@ -15,11 +15,6 @@
 --
 -- =============================================================================
 
-
--- =============================================================================
--- CONTENIDO ORIGINAL (items 1-4) — RAG movido para ser el item 5 al final
--- =============================================================================
-
 -- -----------------------------------------------------------------------------
 -- 1. Resumen ejecutivo de las transacciones de mayor monto
 -- -----------------------------------------------------------------------------
@@ -88,7 +83,6 @@ SELECT SNOWFLAKE.CORTEX.COMPLETE(
     || '"monto_maximo", y nada mas. Texto: Unidad de negocio Retail con '
     || 'transacciones de hasta 480000 pesos en la categoria Electronica.'
 ) AS ALERTA_ESTRUCTURADA;
-
 
 -- -----------------------------------------------------------------------------
 -- 5. RAG - Preparación: schema y tabla de vectores (vector store)
