@@ -13,6 +13,10 @@
 --   4. SNOWFLAKE.CORTEX.COMPLETE   -> extracción estructurada (JSON)
 --   5. RAG — vector store, embeddings y ejemplo de búsqueda vetorial
 --
+-- IMPORTANTE: estas funciones requieren una cuenta que NO sea de prueba
+-- (trial). En cuentas trial Snowflake devuelve el error 399258
+-- "AI function ... is not available for trial accounts". El resto de la demo
+-- (datos, marts, RBAC, modelo ML) no depende de estas consultas.
 -- =============================================================================
 
 -- -----------------------------------------------------------------------------
