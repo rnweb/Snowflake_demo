@@ -187,6 +187,26 @@ SELECT SNOWFLAKE.CORTEX.COMPLETE(
 -- más dirigidas (pregunta + context stack)
 -- -----------------------------------------------------------------------------
 -- La firma real de la función es: CORTEX.EXTRACT_ANSWER(context, question)
+WITH query AS (
+    SELECT 'Analiza el riesgo asociado a la siguiente consulta: transacciones por encima de 400000 en Retail' AS user_question
+),
+q_emb AS (
+    SELECT TRY_CAST(SNOWFLAKE.CORTEX.EMBED('text-embedding-3-large', user_question) AS VECTOR) AS embedding
+    FROM query
+),
+retrieved AS (
+    SELECT d.doc_id, d.title, d.content, d.metadata,
+           VECTOR_INNER_PRODUCT(d.embedding, q_emb.embedding) AS score
+    FROM SUPERINTENDENCY_DEMO_DB.CORTEX_VECTOR_STORE.DOCUMENTS d
+    CROSS JOIN q_emb
+    WHERE d.embedding IS NOT NULL
+    ORDER BY score DESC
+    LIMIT 5
+),
+context_concat AS (
+    SELECT LISTAGG('[' || title || '] ' || content, '\n\n') WITHIN GROUP (ORDER BY score DESC) AS context_text
+    FROM retrieved
+)
 SELECT
     SNOWFLAKE.CORTEX.EXTRACT_ANSWER(
         (SELECT context_text FROM context_concat),
@@ -217,7 +237,7 @@ SELECT SNOWFLAKE.CORTEX.COMPLETE(
 -- -----------------------------------------------------------------------------
 -- RAG - Notas de despliegue y consideraciones
 -- -----------------------------------------------------------------------------
--- - Asegúrate de que el role usado tenga permisos para ejecutar funciones CORTEX.*,
+-- - Asegúrate de que el role usado tenga permisos para ejecutar funciones CORTEX.*, 
 --   y para crear tablas/actualizar datos en SUPERINTENDENCY_DEMO_DB.
 -- - Si la función EMBED o el tipo VECTOR devuelven otro formato (por ejemplo VARIANT),
 --   ajusta el UPDATE para mapear/convertir: p.ej. embedding = TO_VARIANT(SNOWFLAKE.CORTEX.EMBED(...))
