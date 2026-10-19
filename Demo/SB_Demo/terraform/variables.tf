@@ -42,6 +42,11 @@ variable "schema_governance" {
   description = "Masking/row-access policies and role-mapping tables."
 }
 
+variable "schema_vector_store" {
+  type        = string
+  description = "Vector store schema for Cortex embeddings and RAG document retrieval."
+}
+
 # ---------------------------------------------------------------------------
 # Warehouses
 # ---------------------------------------------------------------------------

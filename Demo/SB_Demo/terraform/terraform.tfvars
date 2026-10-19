@@ -10,10 +10,11 @@ demo_db_name       = "SUPERINTENDENCY_DEMO_DB"
 native_app_db_name = "CORTEX_NATIVE_APP_DB"
 
 # Schemas
-schema_core       = "CORE_BANKING_SCHEMA"
-schema_analytics  = "RISK_ANALYTICS_SCHEMA"
-schema_staging    = "STAGING_SCHEMA"
-schema_governance = "GOVERNANCE_SCHEMA"
+schema_core         = "CORE_BANKING_SCHEMA"
+schema_analytics    = "RISK_ANALYTICS_SCHEMA"
+schema_staging      = "STAGING_SCHEMA"
+schema_governance   = "GOVERNANCE_SCHEMA"
+schema_vector_store = "CORTEX_VECTOR_STORE"
 
 # Warehouses
 wh_ingestion = "WH_INGESTION_XSMALL"

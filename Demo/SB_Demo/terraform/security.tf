@@ -217,6 +217,14 @@ resource "snowflake_grant_privileges_to_account_role" "engineer_analytics_build"
   }
 }
 
+resource "snowflake_grant_privileges_to_account_role" "engineer_vector_store_build" {
+  account_role_name = snowflake_account_role.engineer.name
+  privileges        = ["USAGE", "CREATE TABLE", "CREATE VIEW", "MODIFY", "ADD SEARCH OPTIMIZATION"]
+  on_schema {
+    schema_name = snowflake_schema.vector_store.fully_qualified_name
+  }
+}
+
 resource "snowflake_grant_privileges_to_account_role" "engineer_governance_read" {
   account_role_name = snowflake_account_role.engineer.name
   privileges        = ["USAGE"]
@@ -343,6 +351,36 @@ resource "snowflake_grant_privileges_to_account_role" "analyst_native_app_schema
   privileges        = ["USAGE"]
   on_schema {
     schema_name = "${snowflake_database.native_app.name}.PUBLIC"
+  }
+}
+
+resource "snowflake_grant_privileges_to_account_role" "analyst_vector_store_read" {
+  account_role_name = snowflake_account_role.analyst.name
+  privileges        = ["USAGE"]
+  on_schema {
+    schema_name = snowflake_schema.vector_store.fully_qualified_name
+  }
+}
+
+resource "snowflake_grant_privileges_to_account_role" "analyst_vector_store_select_all" {
+  account_role_name = snowflake_account_role.analyst.name
+  privileges        = ["SELECT"]
+  on_schema_object {
+    all {
+      in_schema          = snowflake_schema.vector_store.fully_qualified_name
+      object_type_plural = "TABLES"
+    }
+  }
+}
+
+resource "snowflake_grant_privileges_to_account_role" "analyst_vector_store_select_future" {
+  account_role_name = snowflake_account_role.analyst.name
+  privileges        = ["SELECT"]
+  on_schema_object {
+    future {
+      in_schema          = snowflake_schema.vector_store.fully_qualified_name
+      object_type_plural = "TABLES"
+    }
   }
 }
 

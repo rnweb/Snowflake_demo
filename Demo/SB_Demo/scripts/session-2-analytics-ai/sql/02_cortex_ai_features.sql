@@ -11,6 +11,7 @@
 --   3. SNOWFLAKE.CORTEX.COMPLETE   -> veredicto de riesgo con contexto
 --                                     (patrón RAC sobre el mart, sin embeddings)
 --   4. SNOWFLAKE.CORTEX.COMPLETE   -> extracción estructurada (JSON)
+--   5. RAG — vector store, embeddings y ejemplo de búsqueda vetorial
 --
 -- IMPORTANTE: estas funciones requieren una cuenta que NO sea de prueba
 -- (trial). En cuentas trial Snowflake devuelve el error 399258
@@ -86,3 +87,168 @@ SELECT SNOWFLAKE.CORTEX.COMPLETE(
     || '"monto_maximo", y nada mas. Texto: Unidad de negocio Retail con '
     || 'transacciones de hasta 480000 pesos en la categoria Electronica.'
 ) AS ALERTA_ESTRUCTURADA;
+
+-- -----------------------------------------------------------------------------
+-- 5. RAG - Preparación: schema y tabla de vectores (vector store)
+-- -----------------------------------------------------------------------------
+-- NUEVO BLOQUE (RAG): creación de Vector Type, generación de embeddings y
+-- funciones de búsqueda vetorial (VECTOR_INNER_PRODUCT, CORTEX.EXTRACT_ANSWER)
+-- Este bloque habilita un patrón RAG completo en la cuenta On-Demand.
+--
+-- El schema CORTEX_VECTOR_STORE es provisionado por Terraform (IaC), no por SQL.
+-- Antes de ejecutar este bloque 5, debes correr `terraform apply` para crear el
+-- schema y evitar el error 002043: "Schema does not exist".
+
+-- Tabla para almacenar documentos/contexto + embedding (vector)
+-- Usamos el tipo VECTOR nativo de Snowflake para embeddings.
+CREATE OR REPLACE TABLE SUPERINTENDENCY_DEMO_DB.CORTEX_VECTOR_STORE.DOCUMENTS (
+    doc_id           STRING,
+    title            STRING,
+    content          STRING,
+    metadata         VARIANT,
+    embedding        VECTOR,
+    created_at       TIMESTAMP_LTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+-- -----------------------------------------------------------------------------
+-- RAG - Inserción ejemplar de documentos (demo). Opcional en producción.
+-- -----------------------------------------------------------------------------
+INSERT INTO SUPERINTENDENCY_DEMO_DB.CORTEX_VECTOR_STORE.DOCUMENTS (doc_id, title, content, metadata)
+VALUES
+  ('doc_001', 'Política de monitoreo Retail', 'La unidad Retail tiene reglas de revisión internas para transacciones mayores que establecen pasos de verificación y escalamiento.', PARSE_JSON('{"category":"risk_policy","unit":"Retail"}')),
+  ('doc_002', 'Reporte trimestre Q2', 'Se detectaron transacciones atípicas en el último trimestre en la unidad Retail; se recomienda revisión manual de cuentas con actividad frecuente.', PARSE_JSON('{"category":"report","unit":"Retail"}')),
+  ('doc_003', 'Guía AML', 'Patrones sospechosos incluyen compras fraccionadas, uso repetido de la misma tarjeta en comercios distintos y transferencias a cuentas de alto riesgo.', PARSE_JSON('{"category":"aml","unit":"Retail"}'));
+
+-- -----------------------------------------------------------------------------
+-- RAG - Generación de embeddings y persistencia en la tabla (indexación)
+-- -----------------------------------------------------------------------------
+UPDATE SUPERINTENDENCY_DEMO_DB.CORTEX_VECTOR_STORE.DOCUMENTS d
+SET embedding = (
+    TRY_CAST(
+        SNOWFLAKE.CORTEX.EMBED('snowflake-arctic-embed-m-v1.5', d.content)
+        AS VECTOR
+    )
+)
+WHERE embedding IS NULL;
+
+-- Verifica que embeddings se hayan generado
+SELECT doc_id, title, created_at, CASE WHEN embedding IS NOT NULL THEN 'OK' ELSE 'MISSING' END AS emb_status
+FROM SUPERINTENDENCY_DEMO_DB.CORTEX_VECTOR_STORE.DOCUMENTS;
+
+-- -----------------------------------------------------------------------------
+-- RAG - Búsqueda vectorial básica: similarity por producto interno (inner product)
+-- -----------------------------------------------------------------------------
+WITH query_embedding AS (
+    SELECT TRY_CAST(SNOWFLAKE.CORTEX.EMBED('snowflake-arctic-embed-m-v1.5',
+        'Transacciones sospechosas por montos elevados en Retail durante el ultimo trimestre'
+    ) AS VECTOR) AS q_emb
+)
+SELECT
+    d.doc_id,
+    d.title,
+    d.metadata,
+    VECTOR_INNER_PRODUCT(d.embedding, q.q_emb) AS score
+FROM SUPERINTENDENCY_DEMO_DB.CORTEX_VECTOR_STORE.DOCUMENTS d
+CROSS JOIN query_embedding q
+WHERE d.embedding IS NOT NULL AND q.q_emb IS NOT NULL
+ORDER BY score DESC
+LIMIT 5;
+
+-- -----------------------------------------------------------------------------
+-- RAG - Recuperación + generación de respuesta con contexto (CORTEX.COMPLETE)
+-- -----------------------------------------------------------------------------
+WITH query AS (
+    SELECT 'Analiza el riesgo asociado a la siguiente consulta: transacciones por encima de 400000 en Retail' AS user_question
+),
+q_emb AS (
+    SELECT TRY_CAST(SNOWFLAKE.CORTEX.EMBED('snowflake-arctic-embed-m-v1.5', user_question) AS VECTOR) AS embedding
+    FROM query
+),
+retrieved AS (
+    SELECT d.doc_id, d.title, d.content, d.metadata,
+           VECTOR_INNER_PRODUCT(d.embedding, q_emb.embedding) AS score
+    FROM SUPERINTENDENCY_DEMO_DB.CORTEX_VECTOR_STORE.DOCUMENTS d
+    CROSS JOIN q_emb
+    WHERE d.embedding IS NOT NULL
+    ORDER BY score DESC
+    LIMIT 5
+),
+context_concat AS (
+    SELECT LISTAGG('[' || title || '] ' || content, '\n\n') WITHIN GROUP (ORDER BY score DESC) AS context_text
+    FROM retrieved
+)
+SELECT SNOWFLAKE.CORTEX.COMPLETE(
+    'llama3.1-70b',
+    'Eres un analista de riesgos de la Superintendencia de Bancos. '
+    || 'Usa el contexto recuperado para responder en español. Formato exacto: RIESGO: <ALTO|MEDIO|BAJO> - <justificacion corta>. Contexto: '
+    || (SELECT context_text FROM context_concat)
+) AS RAG_VEREDICTO;
+
+-- -----------------------------------------------------------------------------
+-- RAG - Alternativa: usar CORTEX.EXTRACT_ANSWER (si disponible) para respuestas
+-- más dirigidas (pregunta + context stack)
+-- -----------------------------------------------------------------------------
+-- La firma real de la función es: CORTEX.EXTRACT_ANSWER(context, question)
+WITH query AS (
+    SELECT 'Analiza el riesgo asociado a la siguiente consulta: transacciones por encima de 400000 en Retail' AS user_question
+),
+q_emb AS (
+    SELECT TRY_CAST(SNOWFLAKE.CORTEX.EMBED('snowflake-arctic-embed-m-v1.5', user_question) AS VECTOR) AS embedding
+    FROM query
+),
+retrieved AS (
+    SELECT d.doc_id, d.title, d.content, d.metadata,
+           VECTOR_INNER_PRODUCT(d.embedding, q_emb.embedding) AS score
+    FROM SUPERINTENDENCY_DEMO_DB.CORTEX_VECTOR_STORE.DOCUMENTS d
+    CROSS JOIN q_emb
+    WHERE d.embedding IS NOT NULL
+    ORDER BY score DESC
+    LIMIT 5
+),
+context_concat AS (
+    SELECT LISTAGG('[' || title || '] ' || content, '\n\n') WITHIN GROUP (ORDER BY score DESC) AS context_text
+    FROM retrieved
+)
+SELECT
+    SNOWFLAKE.CORTEX.EXTRACT_ANSWER(
+        (SELECT context_text FROM context_concat),
+        '¿Cuál es el veredicto de riesgo para transacciones > 400000 en Retail? Responde en español con formato: RIESGO: <ALTO|MEDIO|BAJO> - <1 línea>.'
+    ) AS EXTRACTED_ANSWER;
+
+-- -----------------------------------------------------------------------------
+-- RAG - Uso combinado: generar evidencia estructurada (JSON) y alimentar alertas
+-- -----------------------------------------------------------------------------
+WITH top1 AS (
+    SELECT content
+    FROM (
+        SELECT d.content, VECTOR_INNER_PRODUCT(d.embedding,
+            TRY_CAST(SNOWFLAKE.CORTEX.EMBED('snowflake-arctic-embed-m-v1.5',
+                'Buscar evidencia sobre transacciones de alto monto en Retail') AS VECTOR)
+        ) AS score
+        FROM SUPERINTENDENCY_DEMO_DB.CORTEX_VECTOR_STORE.DOCUMENTS d
+        ORDER BY score DESC
+        LIMIT 1
+    )
+)
+SELECT SNOWFLAKE.CORTEX.COMPLETE(
+    'llama3.1-8b',
+    'Extrae de este texto un JSON con las claves "unidad", "categoria" y "monto_maximo", y nada mas. Texto: '
+    || (SELECT content FROM top1)
+) AS ALERTA_ESTRUCTURADA_RAG;
+
+-- -----------------------------------------------------------------------------
+-- RAG - Notas de despliegue y consideraciones
+-- -----------------------------------------------------------------------------
+-- - Asegúrate de que el role usado tenga permisos para ejecutar funciones CORTEX.*, 
+--   y para crear tablas/actualizar datos en SUPERINTENDENCY_DEMO_DB.
+-- - Si la función EMBED o el tipo VECTOR devuelven otro formato (por ejemplo VARIANT),
+--   ajusta el UPDATE para mapear/convertir: p.ej. embedding = TO_VARIANT(SNOWFLAKE.CORTEX.EMBED(...))
+-- - Usa modelos nativos de Cortex soportados por la cuenta, como
+--   `snowflake-arctic-embed-m-v1.5` para embeddings y `llama3.1-*` para texto.
+-- - Para producción: chunking de documentos, normalización, control de costos y
+--   refresh incremental (solo embeddings para textos nuevos/actualizados).
+-- -----------------------------------------------------------------------------
+
+-- =============================================================================
+-- FIN DEL ARCHIVO
+-- =============================================================================

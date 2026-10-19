@@ -17,13 +17,21 @@ This session shows how the platform moves from *governed data* to
 4. **MCP server** — one governed tool (`query_customer_transactions`) that an
    external AI client (e.g. Claude Desktop) queries over the Model Context
    Protocol; Snowflake enforces masking + RLS per connecting role
+5. **RAG vector store** — Cortex embeddings + document retrieval in
+   `SUPERINTENDENCY_DEMO_DB.CORTEX_VECTOR_STORE` for vector search and context
+   grounding before generation
+
+> **Required preparation before the SQL block 5 (vector store):** run
+> `terraform apply` first so the `CORTEX_VECTOR_STORE` schema exists; otherwise
+> Snowflake returns `002043` when the block tries to create or write to the
+> vector-store table.
 
 ## Files
 
 | File | Purpose |
 |------|---------|
 | `python/01_train_fraud_model.py` | Feature SQL, training, evaluation, registry, SQL-inference check |
-| `sql/02_cortex_ai_features.sql`  | Four Cortex calls (Spanish) over `CREDIT_CARD_TRANSACTIONS` |
+| `sql/02_cortex_ai_features.sql`  | Five Cortex / RAG blocks (Spanish) over the mart and the vector store |
 | `sql/04_deploy_streamlit.sql`    | PUT + `CREATE STREAMLIT` (human-gated deploy step; run from repo root with snowsql) |
 | `streamlit_app.py`               | Streamlit app source (Spanish UI) — deployed by `sql/04_deploy_streamlit.sql` after human approval |
 | `python/mcp_server.py`           | stdio MCP server exposing `query_customer_transactions(rut)` for AI clients |
@@ -34,6 +42,8 @@ This session shows how the platform moves from *governed data* to
   apply`), including the Session 2 grants:
   - `CREATE MODEL`, `CREATE FUNCTION` on `RISK_ANALYTICS_SCHEMA`
     (model registration) — `security.tf`
+  - `USAGE` + `CREATE TABLE` / `CREATE VIEW` / `MODIFY` on
+    `CORTEX_VECTOR_STORE` (vector store) — `security.tf`
   - `USAGE` on `WH_APP_XSMALL`, `USAGE`+`CREATE STREAMLIT` and stage
     `READ`/`WRITE` on `CORTEX_NATIVE_APP_DB.PUBLIC` (app deployment)
 - Python **3.12** virtualenv at the repository root (snowflake-ml-python has
@@ -100,8 +110,8 @@ Notes for the presenter (all handled inside the script):
 
 ## Step 2 — Cortex AI in Spanish
 
-`sql/02_cortex_ai_features.sql` contains four statements (comments and output
-in Spanish):
+`sql/02_cortex_ai_features.sql` contains five blocks (comments and output in
+Spanish):
 
 1. `SNOWFLAKE.CORTEX.SUMMARIZE` — resumen ejecutivo de las transacciones ≥
    400 000 (lista de 30, LISTAGG)
@@ -111,6 +121,9 @@ in Spanish):
    (patrón RAC sobre el mart, sin embeddings)
 4. `SNOWFLAKE.CORTEX.COMPLETE('llama3.1-8b', …)` — extracción estructurada
    JSON para un sistema de alertas
+5. `CORTEX_VECTOR_STORE` RAG block — embeddings, vector retrieval and a
+   `CORTEX.EXTRACT_ANSWER(context, question)` example grounded in retrieved
+   context
 
 Run them from a Snowsight worksheet (or any SQL client) as
 **`FR_DATA_ENGINEER`** on **`WH_APP_XSMALL`** (or `WH_CORTEX_LARGE` when the
@@ -118,10 +131,14 @@ account has credits to spare — never the default).
 
 > **Limitación de la cuenta demo:** esta cuenta es de prueba (*trial*) y
 > Snowflake devuelve `399258 (0A000): AI function ... is not available for
-> trial accounts` para las tres funciones. Las cuatro consultas están
-> verificadas: compilan, resuelven la función y solo chocan con esa puerta de
-> licencia. En una cuenta estándar producen los textos descritos arriba. El
-> resto de la demo (datos, RBAC, modelo ML, app) no depende de Cortex.
+> trial accounts` para las tres funciones. Los bloques 1-4 están verificados:
+> compilan, resuelven la función y solo chocan con esa puerta de licencia. El
+> bloque 5 (vector store / RAG) es **sintácticamente válido pero no se ha
+> ejecutado de extremo a extremo** en esta cuenta: requiere `terraform apply`
+> previo (el schema `CORTEX_VECTOR_STORE` lo crea Terraform) y sus llamadas a
+> `EMBED`/`COMPLETE` chocan con la misma puerta `399258` en cuentas trial. En
+> una cuenta estándar producen los textos descritos arriba. El resto de la
+> demo (datos, RBAC, modelo ML, app) no depende de Cortex.
 
 ## Step 3 — Streamlit app (human approval required)
 
@@ -218,10 +235,15 @@ and reads back the numbers.
 
 | # | Ask / do | Expected result |
 |---|----------|-----------------|
-| 1 | Tool call as `FR_BI_ANALYST`, RUT `5.017.491-3` (retail customer, `limit=100`) | `row_count: 76` (76 rows exist; default `limit=20` returns 20), `RUT` column shows the deterministic pseudonym `***-**-e93d5c93280b`, every `NUMERO_TARJETA` = `****-****-****-****`, `UNIDAD_NEGOCIO` = `RETAIL` only — **masked + RLS + still filterable** |
+| 1 | Tool call as `FR_BI_ANALYST`, RUT `5.017.491-3` (retail customer, `limit=100`) | `row_count: 76` (76 rows exist; default `limit=20` returns 20), `RUT` column shows the deterministic pseudonym, and the customer is within the retail slice |
 | 2 | Same role, RUT `5.000.081-8` (non-retail customer) | `row_count: 0` — the row-access policy hides the customer entirely (45 rows exist) |
-| 3 | Change `SNOWFLAKE_ROLE` to `FR_DEMO_ADMIN`, restart Claude Desktop, repeat 1–2 | plaintext RUTs and PANs (e.g. `4111-1119-9180-8125`), `rut_filter: plaintext`, and 45 rows for `5.000.081-8` — same tool, **zero app changes** |
+| 3 | Change `SNOWFLAKE_ROLE` to `FR_DEMO_ADMIN`, restart Claude Desktop, repeat 1–2 | plaintext RUTs and PANs (e.g. `4111-1119-9180-8125`), `rut_filter: plaintext`, and 45 rows for `5.000.081-8` |
 | 4 | (Optional) ask the agent to read `STAGING_SCHEMA` | fails with `002003` — `FR_BI_ANALYST` holds no staging grants, and the session has secondary roles disabled |
+
+**Expected MCP governance checks:**
+- `NUMERO_TARJETA` must be masked as `****-****-****-****` for the analyst role;
+- `query_customer_transactions(rut)` must return only `UNIDAD_NEGOCIO = 'RETAIL'` rows for `FR_BI_ANALYST`;
+- when the role is changed to `FR_DEMO_ADMIN`, the same query returns plaintext RUTs/PANs and the full customer set.
 
 **Why filtering still works under masking:** Snowflake evaluates `WHERE`
 predicates on the *post-policy* value, so a random mask would return 0 rows
@@ -238,3 +260,4 @@ The return payload always echoes `role`, `warehouse`, `rut_filter` and a
 
 - Session 1 (data foundation): `../session-1-lakehouse/README.md`
 - Execution order & guardrails: `../../prompts/03-execution-validation.md`
+
