@@ -11,17 +11,92 @@
 --   3. SNOWFLAKE.CORTEX.COMPLETE   -> veredicto de riesgo con contexto
 --                                     (patrón RAC sobre el mart, sin embeddings)
 --   4. SNOWFLAKE.CORTEX.COMPLETE   -> extracción estructurada (JSON)
+--   5. RAG — vector store, embeddings y ejemplo de búsqueda vetorial
 --
---
--- NUEVO BLOQUE (RAG): creación de Vector Type, generación de embeddings y
--- funciones de búsqueda vetorial (VECTOR_INNER_PRODUCT, CORTEX.EXTRACT_ANSWER)
--- Este bloque fue añadido para habilitar un patrón RAG completo en la cuenta
--- On‑Demand que vas a crear.
+-- =============================================================================
+
+
+-- =============================================================================
+-- CONTENIDO ORIGINAL (items 1-4) — RAG movido para ser el item 5 al final
 -- =============================================================================
 
 -- -----------------------------------------------------------------------------
--- RAG - Preparación: schema y tabla de vectores (vector store)
+-- 1. Resumen ejecutivo de las transacciones de mayor monto
 -- -----------------------------------------------------------------------------
+SELECT SNOWFLAKE.CORTEX.SUMMARIZE(
+    LISTAGG(
+        'El ' || TO_VARCHAR(FECHA_TRANSACCION, 'YYYY-MM-DD HH24:MI')
+        || ' se registro una transaccion de ' || TO_VARCHAR(MONTO)
+        || ' pesos en ' || COMERCIO || ' (' || CIUDAD
+        || '), categoria ' || CATEGORIA
+        || ', estado ' || ESTADO
+        || ', unidad de negocio ' || UNIDAD_NEGOCIO || '.',
+        ' '
+    ) WITHIN GROUP (ORDER BY MONTO DESC)
+) AS RESUMEN_EJECUTIVO
+FROM (
+    SELECT FECHA_TRANSACCION, MONTO, COMERCIO, CIUDAD, CATEGORIA, ESTADO, UNIDAD_NEGOCIO
+    FROM SUPERINTENDENCY_DEMO_DB.CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS
+    WHERE MONTO >= 400000
+    ORDER BY MONTO DESC
+    LIMIT 30
+);
+
+-- -----------------------------------------------------------------------------
+-- 2. Traducción al inglés del encabezado de un reporte de cumplimiento
+-- -----------------------------------------------------------------------------
+SELECT SNOWFLAKE.CORTEX.TRANSLATE(
+    'La Superintendencia de Bancos requiere revision prioritaria de las '
+    || 'transacciones por encima de 400000 pesos detectadas en la unidad de '
+    || 'negocio Retail durante el ultimo trimestre.',
+    'es',
+    'en'
+) AS TRADUCCION_INFORME;
+
+-- -----------------------------------------------------------------------------
+-- 3. Veredicto de riesgo en español con contexto de las 10 peores
+--    transacciones (patrón RAC: contexto recuperado por SQL + LLM de Cortex)
+-- -----------------------------------------------------------------------------
+SELECT SNOWFLAKE.CORTEX.COMPLETE(
+    'llama3.1-70b',
+    'Eres un analista de riesgos de la Superintendencia de Bancos. '
+    || 'Con base en el contexto de transacciones que sigue, responde en '
+    || 'español con el formato exacto: RIESGO: <ALTO|MEDIO|BAJO> - '
+    || '<justificacion de una linea>. Contexto: '
+    || (
+        SELECT LISTAGG(
+            TO_VARCHAR(MONTO) || ' pesos, ' || COMERCIO || ', '
+            || CATEGORIA || ', estado ' || ESTADO
+            || ', unidad ' || UNIDAD_NEGOCIO,
+            '; '
+        ) WITHIN GROUP (ORDER BY MONTO DESC)
+        FROM (
+            SELECT MONTO, COMERCIO, CATEGORIA, ESTADO, UNIDAD_NEGOCIO
+            FROM SUPERINTENDENCY_DEMO_DB.CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS
+            ORDER BY MONTO DESC
+            LIMIT 10
+        )
+    )
+) AS VEREDICTO_RIESGO;
+
+-- -----------------------------------------------------------------------------
+-- 4. Extracción estructurada (JSON) para alimentar un sistema de alertas
+-- -----------------------------------------------------------------------------
+SELECT SNOWFLAKE.CORTEX.COMPLETE(
+    'llama3.1-8b',
+    'Extrae de este texto un JSON con las claves "unidad", "categoria" y '
+    || '"monto_maximo", y nada mas. Texto: Unidad de negocio Retail con '
+    || 'transacciones de hasta 480000 pesos en la categoria Electronica.'
+) AS ALERTA_ESTRUCTURADA;
+
+
+-- -----------------------------------------------------------------------------
+-- 5. RAG - Preparación: schema y tabla de vectores (vector store)
+-- -----------------------------------------------------------------------------
+-- NUEVO BLOQUE (RAG): creación de Vector Type, generación de embeddings y
+-- funciones de búsqueda vetorial (VECTOR_INNER_PRODUCT, CORTEX.EXTRACT_ANSWER)
+-- Este bloque habilita un patrón RAG completo en la cuenta On‑Demand.
+
 CREATE OR REPLACE SCHEMA IF NOT EXISTS SUPERINTENDENCY_DEMO_DB.CORTEX_VECTOR_STORE;
 
 -- Tabla para almacenar documentos/contexto + embedding (vector)
@@ -42,9 +117,9 @@ CREATE OR REPLACE TABLE SUPERINTENDENCY_DEMO_DB.CORTEX_VECTOR_STORE.DOCUMENTS (
 -- llenar esta tabla con chunks del mart, políticas, logs, o extractos relevantes.
 INSERT INTO SUPERINTENDENCY_DEMO_DB.CORTEX_VECTOR_STORE.DOCUMENTS (doc_id, title, content, metadata)
 VALUES
-  ('doc_001', 'Política de monitoreo Retail', 'La unidad Retail tiene reglas de revisión internas para transacciones mayores que establecen pasos de verificación y escalamiento.', OBJECT_CONSTRUCT('unit','Retail','source','policy')),
-  ('doc_002', 'Reporte trimestre Q2',            'Se detectaron transacciones atípicas en el último trimestre en la unidad Retail; se recomienda revisión manual de cuentas con actividad frecuente y montos elevados.', OBJECT_CONSTRUCT('unit','Retail','source','report')),
-  ('doc_003', 'Guía AML',                         'Patrones sospechosos incluyen compras fraccionadas, uso repetido de la misma tarjeta en comercios distintos y transferencias a cuentas de alto riesgo.', OBJECT_CONSTRUCT('unit','All','source','aml_guide'));
+  ('doc_001', 'Política de monitoreo Retail', 'La unidad Retail tiene reglas de revisión internas para transacciones mayores que establecen pasos de verificación y escalamiento.', OBJECT_CONSTR[...] ),
+  ('doc_002', 'Reporte trimestre Q2',            'Se detectaron transacciones atípicas en el último trimestre en la unidad Retail; se recomienda revisión manual de cuentas con actividad frecuen[...]', OBJECT_CONSTR[...] ),
+  ('doc_003', 'Guía AML',                         'Patrones sospechosos incluyen compras fraccionadas, uso repetido de la misma tarjeta en comercios distintos y transferencias a cuentas de alto r[...]', OBJECT_CONSTR[...] );
 
 -- -----------------------------------------------------------------------------
 -- RAG - Generación de embeddings y persistencia en la tabla (indexación)
@@ -167,74 +242,5 @@ SELECT SNOWFLAKE.CORTEX.COMPLETE(
 -- -----------------------------------------------------------------------------
 
 -- =============================================================================
--- CONTENIDO ORIGINAL (se mantiene intacto a continuación)
+-- FIN DEL ARCHIVO
 -- =============================================================================
-
--- -----------------------------------------------------------------------------
--- 1. Resumen ejecutivo de las transacciones de mayor monto
--- -----------------------------------------------------------------------------
-SELECT SNOWFLAKE.CORTEX.SUMMARIZE(
-    LISTAGG(
-        'El ' || TO_VARCHAR(FECHA_TRANSACCION, 'YYYY-MM-DD HH24:MI')
-        || ' se registro una transaccion de ' || TO_VARCHAR(MONTO)
-        || ' pesos en ' || COMERCIO || ' (' || CIUDAD
-        || '), categoria ' || CATEGORIA
-        || ', estado ' || ESTADO
-        || ', unidad de negocio ' || UNIDAD_NEGOCIO || '.',
-        ' '
-    ) WITHIN GROUP (ORDER BY MONTO DESC)
-) AS RESUMEN_EJECUTIVO
-FROM (
-    SELECT FECHA_TRANSACCION, MONTO, COMERCIO, CIUDAD, CATEGORIA, ESTADO, UNIDAD_NEGOCIO
-    FROM SUPERINTENDENCY_DEMO_DB.CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS
-    WHERE MONTO >= 400000
-    ORDER BY MONTO DESC
-    LIMIT 30
-);
-
--- -----------------------------------------------------------------------------
--- 2. Traducción al inglés del encabezado de un reporte de cumplimiento
--- -----------------------------------------------------------------------------
-SELECT SNOWFLAKE.CORTEX.TRANSLATE(
-    'La Superintendencia de Bancos requiere revision prioritaria de las '
-    || 'transacciones por encima de 400000 pesos detectadas en la unidad de '
-    || 'negocio Retail durante el ultimo trimestre.',
-    'es',
-    'en'
-) AS TRADUCCION_INFORME;
-
--- -----------------------------------------------------------------------------
--- 3. Veredicto de riesgo en español con contexto de las 10 peores
---    transacciones (patrón RAC: contexto recuperado por SQL + LLM de Cortex)
--- -----------------------------------------------------------------------------
-SELECT SNOWFLAKE.CORTEX.COMPLETE(
-    'llama3.1-70b',
-    'Eres un analista de riesgos de la Superintendencia de Bancos. '
-    || 'Con base en el contexto de transacciones que sigue, responde en '
-    || 'español con el formato exacto: RIESGO: <ALTO|MEDIO|BAJO> - '
-    || '<justificacion de una linea>. Contexto: '
-    || (
-        SELECT LISTAGG(
-            TO_VARCHAR(MONTO) || ' pesos, ' || COMERCIO || ', '
-            || CATEGORIA || ', estado ' || ESTADO
-            || ', unidad ' || UNIDAD_NEGOCIO,
-            '; '
-        ) WITHIN GROUP (ORDER BY MONTO DESC)
-        FROM (
-            SELECT MONTO, COMERCIO, CATEGORIA, ESTADO, UNIDAD_NEGOCIO
-            FROM SUPERINTENDENCY_DEMO_DB.CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS
-            ORDER BY MONTO DESC
-            LIMIT 10
-        )
-    )
-) AS VEREDICTO_RIESGO;
-
--- -----------------------------------------------------------------------------
--- 4. Extracción estructurada (JSON) para alimentar un sistema de alertas
--- -----------------------------------------------------------------------------
-SELECT SNOWFLAKE.CORTEX.COMPLETE(
-    'llama3.1-8b',
-    'Extrae de este texto un JSON con las claves "unidad", "categoria" y '
-    || '"monto_maximo", y nada mas. Texto: Unidad de negocio Retail con '
-    || 'transacciones de hasta 480000 pesos en la categoria Electronica.'
-) AS ALERTA_ESTRUCTURADA;
