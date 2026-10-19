@@ -131,10 +131,14 @@ account has credits to spare — never the default).
 
 > **Limitación de la cuenta demo:** esta cuenta es de prueba (*trial*) y
 > Snowflake devuelve `399258 (0A000): AI function ... is not available for
-> trial accounts` para las tres funciones. Los cinco bloques están
-> verificadas: compilan, resuelven la función y solo chocan con esa puerta de
-> licencia. En una cuenta estándar producen los textos descritos arriba. El
-> resto de la demo (datos, RBAC, modelo ML, app) no depende de Cortex.
+> trial accounts` para las tres funciones. Los bloques 1-4 están verificados:
+> compilan, resuelven la función y solo chocan con esa puerta de licencia. El
+> bloque 5 (vector store / RAG) es **sintácticamente válido pero no se ha
+> ejecutado de extremo a extremo** en esta cuenta: requiere `terraform apply`
+> previo (el schema `CORTEX_VECTOR_STORE` lo crea Terraform) y sus llamadas a
+> `EMBED`/`COMPLETE` chocan con la misma puerta `399258` en cuentas trial. En
+> una cuenta estándar producen los textos descritos arriba. El resto de la
+> demo (datos, RBAC, modelo ML, app) no depende de Cortex.
 
 ## Step 3 — Streamlit app (human approval required)
 
