@@ -1,7 +1,7 @@
 # Phase 3 — Next Steps: Data, Logic & App Delivery
 
 > **Status:** Phase 2 (Terraform IaC) is **complete** — `terraform plan` reports
-> *"No changes. Your infrastructure matches the configuration."* (61 resources).
+> *"No changes. Your infrastructure matches the configuration."* (64 resources).
 
 Phase 3 delivers everything Terraform deliberately does **not** manage: data,
 transformation logic and application code. Per the separation of concerns, these
@@ -19,7 +19,8 @@ live in `scripts/session-*` and are executed with the demo roles — never as
 | Warehouses | `WH_INGESTION_XSMALL`, `WH_CORTEX_LARGE`, `WH_APP_XSMALL` |
 | Roles | `FR_DEMO_ADMIN` → (`FR_DATA_ENGINEER`, `FR_BI_ANALYST`) |
 | Governance | `MASK_NATIONAL_ID`, `MASK_CREDIT_CARD`, `RLS_BUSINESS_UNIT`, `ROLE_MAPPING` table (empty) |
-| RBAC | 36 grant resources — 33 least-privilege grants + 3 role-hierarchy links (engineer builds, analyst reads, admin orchestrates) |
+| RBAC | 37 grant resources — 34 least-privilege grants + 3 role-hierarchy links (engineer builds, analyst reads, admin orchestrates) |
+| Integrations | Network Rule + external-access integration for the FX API (Session 4 — `main.tf`/`security.tf`) |
 
 **Manual bootstrap (already executed as ACCOUNTADMIN — re-run only on a fresh account):**
 
@@ -130,6 +131,31 @@ Executed **after** `CLIENT_PROFILE_DIM` and `CREDIT_CARD_TRANSACTIONS` exist
    (`sfguide-getting-started-with-horizon-data-governance-in-snowflake`).
 
 ---
+
+## 4. Session 4 — Integrations & APIs (`scripts/session-4-integrations-apis/`)
+
+Closes requirement **C03** (*Integraciones y APIs*) with native Snowflake
+hooks for the external orchestrator (Informatica IDMC):
+
+1. **Inbound — external API ingestion (this PR).** `terraform apply` first
+   (Network Rule `API_CURRENCY_NETWORK_RULE` + External Access Integration
+   `API_CURRENCY_INTEGRATION` + engineer `USAGE` grant — `main.tf`/
+   `security.tf`), then run
+   `sql/01_api_ingestion_procedure.sql` (bronze table + `SP_INGEST_EXTERNAL_API`,
+   `FR_DATA_ENGINEER` on `WH_INGESTION_XSMALL`). IDMC triggers:
+
+   ```sql
+   CALL SUPERINTENDENCY_DEMO_DB.STAGING_SCHEMA.SP_INGEST_EXTERNAL_API();
+   ```
+
+2. **Outbound — Snowflake SQL API** over the governed mart (masked PII under
+   `FR_BI_ANALYST`): follow-up deliverable, not yet in this repo.
+
+> **Validation pending:** the procedure has not been executed end-to-end on the
+> trial account (External Access availability unverified there). If the account
+> blocks it, document the exact gate here like the Cortex `399258` one — never
+> claim a call ran when it didn't.
+
 
 ## Guardrails to keep in Phase 3
 
