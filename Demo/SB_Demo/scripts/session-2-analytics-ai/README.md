@@ -74,7 +74,7 @@ From the repository root:
 ```
 
 Expected output (role `FR_DATA_ENGINEER`, warehouse `WH_APP_XSMALL` — the
-small default keeps trial credits safe; override with `SNOWFLAKE_WAREHOUSE`,
+small default keeps costs bounded; override with `SNOWFLAKE_WAREHOUSE`,
 e.g. `WH_CORTEX_LARGE` for parallel training benches):
 
 ```
@@ -113,31 +113,31 @@ Notes for the presenter (all handled inside the script):
 `sql/02_cortex_ai_features.sql` contains five blocks (comments and output in
 Spanish):
 
-1. `SNOWFLAKE.CORTEX.SUMMARIZE` — resumen ejecutivo de las transacciones ≥
+1. `AI_SUMMARIZE` — resumen ejecutivo de las transacciones ≥
    400 000 (lista de 30, LISTAGG)
-2. `SNOWFLAKE.CORTEX.TRANSLATE` — encabezado de informe ES → EN
-3. `SNOWFLAKE.CORTEX.COMPLETE('llama3.1-70b', …)` — veredicto de riesgo
+2. `AI_TRANSLATE` — encabezado de informe ES → EN
+3. `AI_COMPLETE('llama3.1-70b', …)` — veredicto de riesgo
    `RIESGO: ALTO|MEDIO|BAJO` con contexto de las 10 peores transacciones
    (patrón RAC sobre el mart, sin embeddings)
-4. `SNOWFLAKE.CORTEX.COMPLETE('llama3.1-8b', …)` — extracción estructurada
+4. `AI_COMPLETE('llama3.1-8b', …)` — extracción estructurada
    JSON para un sistema de alertas
-5. `CORTEX_VECTOR_STORE` RAG block — embeddings, vector retrieval and a
-   `CORTEX.EXTRACT_ANSWER(context, question)` example grounded in retrieved
-   context
+5. `CORTEX_VECTOR_STORE` RAG block — embeddings (`AI_EMBED`), vector
+   retrieval (`VECTOR_INNER_PRODUCT`) and grounded answers via
+   `AI_COMPLETE` + `AI_EXTRACT` (mode `question answering`)
 
 Run them from a Snowsight worksheet (or any SQL client) as
 **`FR_DATA_ENGINEER`** on **`WH_APP_XSMALL`** (or `WH_CORTEX_LARGE` when the
 account has credits to spare — never the default).
 
-> **Limitación de la cuenta demo:** esta cuenta es de prueba (*trial*) y
-> Snowflake devuelve `399258 (0A000): AI function ... is not available for
-> trial accounts` para las tres funciones. Los bloques 1-4 están verificados:
-> compilan, resuelven la función y solo chocan con esa puerta de licencia. El
-> bloque 5 (vector store / RAG) es **sintácticamente válido pero no se ha
-> ejecutado de extremo a extremo** en esta cuenta: requiere `terraform apply`
-> previo (el schema `CORTEX_VECTOR_STORE` lo crea Terraform) y sus llamadas a
-> `EMBED`/`COMPLETE` chocan con la misma puerta `399258` en cuentas trial. En
-> una cuenta estándar producen los textos descritos arriba. El resto de la
+> **Cuenta On-Demand (verificado):** los cinco bloques se ejecutaron de
+> extremo a extremo el 2026-10-21 en la cuenta On-Demand `zkdcmqh-fjc41457`:
+> resumen, traducción, veredicto RAC y JSON (bloques 1-4) más el RAG completo
+> (bloque 5: tabla `CORTEX_VECTOR_STORE.DOCUMENTS`, embeddings `AI_EMBED`
+> 768-d, recuperación por `VECTOR_INNER_PRODUCT` y respuesta generada con
+> `AI_COMPLETE`/`AI_EXTRACT`). **Nota para cuentas nuevas:** las funciones
+> heredadas `SNOWFLAKE.CORTEX.*` están bloqueadas (error `399270`), por lo que
+> el script usa el espacio de nombres moderno `AI_*` (`AI_SUMMARIZE`,
+> `AI_TRANSLATE`, `AI_COMPLETE`, `AI_EMBED`, `AI_EXTRACT`). El resto de la
 > demo (datos, RBAC, modelo ML, app) no depende de Cortex.
 
 ## Step 3 — Streamlit app (human approval required)
@@ -150,8 +150,8 @@ account has credits to spare — never the default).
 - Tabla de las 20 transacciones de mayor monto (sin columnas sensibles)
 - **Evaluador de riesgo**: formulario que invoca
   `MODEL(..., V1)!predict(...)` desde SQL y muestra ALERTA / sin alerta
-- **Resumen con Cortex**: caja de texto → `CORTEX.SUMMARIZE` (aviso amable en
-  cuentas trial)
+- **Resumen con Cortex**: caja de texto → `AI_SUMMARIZE` (aviso amable si la
+  función no está disponible en la cuenta)
 
 > 🚧 **Guardrail:** the automation never deploys apps. After explicit human
 > review and approval of `streamlit_app.py`, the presenter runs
@@ -189,7 +189,7 @@ Install the protocol library (once, into the same virtualenv as Step 1):
 Run manually (stdio transport; the MCP client spawns it for you):
 
 ```bash
-set SNOWFLAKE_ACCOUNT=RBGXIGI-UAC53151
+set SNOWFLAKE_ACCOUNT=zkdcmqh-fjc41457
 set SNOWFLAKE_USER=OPERATIONS
 set SNOWFLAKE_AUTHENTICATOR=SNOWFLAKE_JWT
 set SNOWFLAKE_PRIVATE_KEY_PATH=%USERPROFILE%\rsa_key.p8
@@ -215,7 +215,7 @@ Add to the `mcpServers` block of Claude Desktop's config
       "command": "C:\\path\\to\\.venv\\Scripts\\python.exe",
       "args": ["-u", "Demo/SB_Demo/scripts/session-2-analytics-ai/python/mcp_server.py"],
       "env": {
-        "SNOWFLAKE_ACCOUNT": "RBGXIGI-UAC53151",
+        "SNOWFLAKE_ACCOUNT": "zkdcmqh-fjc41457",
         "SNOWFLAKE_USER": "OPERATIONS",
         "SNOWFLAKE_AUTHENTICATOR": "SNOWFLAKE_JWT",
         "SNOWFLAKE_PRIVATE_KEY_PATH": "C:\\Users\\<you>\\rsa_key.p8",

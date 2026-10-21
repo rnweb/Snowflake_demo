@@ -6,9 +6,8 @@ Interfaz en español para la demo de la Superintendencia de Bancos:
 2. Formulario de evaluación de riesgo que invoca el modelo registrado
    SUPERINTENDENCY_DEMO_DB.RISK_ANALYTICS_SCHEMA.DETECTOR_FRAUDES (V1)
    mediante SQL:  SELECT MODEL(..., V1)!predict(...) FROM (SELECT 1)
-3. Caja de texto con funciones de Cortex (SUMMARIZE) — requiere cuenta
-   que no sea de prueba (trial); se muestra un aviso amable si no está
-   disponible.
+3. Caja de texto con funciones de Cortex (AI_SUMMARIZE) — se muestra un
+   aviso amable si la función no está disponible en la cuenta.
 
 Conexión: st.connection("snowflake") (identidad de la aplicación desplegada);
 la sesión se cambia a FR_DATA_ENGINEER de forma vigilada, con repuesto al
@@ -241,15 +240,16 @@ def caja_cortex() -> None:
         try:
             literal = "'" + texto.replace("'", "''") + "'"
             resumen = get_session().sql(
-                f"SELECT SNOWFLAKE.CORTEX.SUMMARIZE({literal})"
+                f"SELECT AI_SUMMARIZE({literal})"
             ).collect()[0][0]
             st.info(resumen)
         except Exception as exc:  # noqa: BLE001
-            if "399258" in str(exc):
+            if "399258" in str(exc) or "399270" in str(exc):
                 st.warning(
                     "Las funciones de IA de Cortex no están disponibles en "
-                    "cuentas de prueba (trial). Con una cuenta estándar, esta "
-                    "caja genera resúmenes en español con CORTEX.SUMMARIZE."
+                    "esta cuenta (puerta de licencia o funciones heredadas "
+                    "bloqueadas en cuentas nuevas). Con una cuenta habilitada, "
+                    "esta caja genera resúmenes en español con AI_SUMMARIZE."
                 )
             else:
                 st.error(f"Error al invocar Cortex: {exc}")

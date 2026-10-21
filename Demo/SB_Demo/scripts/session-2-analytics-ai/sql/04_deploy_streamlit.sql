@@ -13,7 +13,7 @@
 -- Run as FR_DATA_ENGINEER (holds CREATE STREAMLIT + stage READ/WRITE on
 -- CORTEX_NATIVE_APP_DB.PUBLIC — see terraform/security.tf).
 -- Expected: SHOW STREAMLITS returns PANEL_PREVENCION_FRAUDE with
--- query_warehouse WH_APP_XSMALL (small warehouse — trial-credit guardrail).
+-- query_warehouse WH_APP_XSMALL (small warehouse — cost guardrail).
 -- =============================================================================
 
 USE ROLE FR_DATA_ENGINEER;

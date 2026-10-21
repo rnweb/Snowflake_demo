@@ -43,7 +43,7 @@ third-party audit fixes below (`SHOW` commands and `COUNT(*)` per table — see
 | Warehouse | Size | Auto-suspend | Purpose |
 |-----------|------|--------------|---------|
 | `WH_INGESTION_XSMALL` | XSMALL | 60 s | Snowpipe / dbt runs |
-| `WH_CORTEX_LARGE` | LARGE | 120 s | Optional heavy benches only — **no script defaults here** (trial-credit guardrail); runtimes accept `SNOWFLAKE_WAREHOUSE` |
+| `WH_CORTEX_LARGE` | LARGE | 120 s | Optional heavy benches only — **no script defaults here** (cost guardrail); runtimes accept `SNOWFLAKE_WAREHOUSE` |
 | `WH_APP_XSMALL` | XSMALL | 60 s | Default compute: Streamlit / Native App, ML training, Cortex SQL, MCP sessions |
 
 All created `INITIALLY SUSPENDED`; timeouts 300 s (ingestion/app), 600 s (Cortex).
@@ -126,7 +126,7 @@ Mart facts: `UNIDAD_NEGOCIO` = PYME 6 223 / CORPORATIVO 5 928 / RETAIL 5 849;
 | Asset | Detail |
 |-------|--------|
 | **Model** `SUPERINTENDENCY_DEMO_DB.RISK_ANALYTICS_SCHEMA.DETECTOR_FRAUDES` (V1) | RandomForest fraud detector, trained by `session-2/python/01_train_fraud_model.py` on the mart; features `MONTO`, `HORA`, `DIA_SEMANA`, `FIN_DE_SEMANA`, `CATEGORIA_ALTO_RIESGO`, `UNIDAD_NEGOCIO_COD`; evaluation: `EVALUADOS=3651 ACCURACY=0.9310 RECALL=0.4404 PRECISION=0.7608` |
-| **Cortex AI** (5 blocks, `session-2/sql/02_cortex_ai_features.sql`) | `SNOWFLAKE.CORTEX.SUMMARIZE`, `SNOWFLAKE.CORTEX.TRANSLATE`, `SNOWFLAKE.CORTEX.COMPLETE` ×2, and the `CORTEX_VECTOR_STORE` retrieval block for RAG context. **Trial account gate `399258`**: blocks 1-4 compile and resolve but return "not available for trial accounts" until run on a standard account; block 5 additionally requires `terraform apply` for the `CORTEX_VECTOR_STORE` schema and remains unexecuted end-to-end on trial |
+| **Cortex AI** (5 blocks, `session-2/sql/02_cortex_ai_features.sql`) | `AI_SUMMARIZE`, `AI_TRANSLATE`, `AI_COMPLETE` ×2, and the `CORTEX_VECTOR_STORE` RAG block (`AI_EMBED` 768-d embeddings, `VECTOR_INNER_PRODUCT` retrieval, grounded answers via `AI_COMPLETE` + `AI_EXTRACT` question-answering). **Verified end-to-end 2026-10-21 on On-Demand account `zkdcmqh-fjc41457`** (no licence gate). New accounts block the legacy `SNOWFLAKE.CORTEX.*` namespace with `399270` — the script uses the modern `AI_*` namespace |
 | **Streamlit** `PANEL_PREVENCION_FRAUDE` | Source: `session-2/streamlit_app.py` (Spanish UI: KPIs, charts, model-inference form, Cortex text box). **Deployed 2026-10-15** via `session-2/sql/04_deploy_streamlit.sql` after explicit human approval — automation still never deploys on its own; `SHOW STREAMLITS` returns the app (`owner: FR_DATA_ENGINEER`, `WH_APP_XSMALL`) |
 | **MCP server** (C06-PRE-06 & C06-AE-08) | `session-2/python/mcp_server.py` — stdio Model Context Protocol server exposing `query_customer_transactions(rut)` over `CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS` with masking + RLS in Snowflake |
 
