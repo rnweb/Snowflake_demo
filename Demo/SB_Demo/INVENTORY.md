@@ -36,6 +36,7 @@ third-party audit fixes below (`SHOW` commands and `COUNT(*)` per table — see
 | `├── GOVERNANCE_SCHEMA` | `main.tf` | Masking/RLS policies, tag, `ROLE_MAPPING` |
 | `├── CORTEX_VECTOR_STORE` | `main.tf` | Vector embeddings and document chunks for Cortex RAG retrieval |
 | `CORTEX_NATIVE_APP_DB` | `main.tf` | Native App / Streamlit staging area |
+| `├── API_CURRENCY_NETWORK_RULE` | `main.tf` | Egress allow-list (FX API) bound to external-access integration `API_CURRENCY_INTEGRATION` — Session 4 |
 | `└── PUBLIC` | built-in | `STREAMLIT_STAGE` (app source files) |
 
 ### Warehouses
@@ -59,7 +60,8 @@ FR_TERRAFORM                 # separate IaC-only role (no demo-hierarchy grants)
 ```
 
 - **Terraform-managed grants** (`security.tf`): engineer build privileges on
-  staging/core/analytics/vector-store (incl. `CREATE ICEBERG TABLE`, `CREATE MODEL`),
+  staging/core/analytics/vector-store **and the FX-API external-access integration**
+  (incl. `CREATE ICEBERG TABLE`, `CREATE MODEL`),
   analyst read-only `SELECT` on core/analytics/vector-store plus `USAGE` on
   `CORTEX_NATIVE_APP_DB` — **no staging access** (revoked 2026-10-07) —, warehouse `USAGE`,
   admin policy authoring (`CREATE MASKING POLICY`/`ROW ACCESS POLICY`/`TAG` on
@@ -93,6 +95,7 @@ FR_TERRAFORM                 # separate IaC-only role (no demo-hierarchy grants)
 | `…STAGING_SCHEMA.STG_TARJETAS_CREDITO` | view | — | dbt (`staging/stg_tarjetas_credito.sql`) |
 | `…STAGING_SCHEMA.STG_TRANSACCIONES` | view | — | dbt (`staging/stg_transacciones.sql`) |
 | `…CORE_BANKING_SCHEMA.HISTORICO_TRANSACCIONES_ICEBERG` | **Iceberg table** | 18 000 | Session 1 `03_iceberg_lakehouse_demo.sql` |
+| `…STAGING_SCHEMA.API_RAW_CURRENCY_DATA` | table | grows +1 per CALL | Session 4 `01_api_ingestion_procedure.sql` | raw FX-API payload (VARIANT) via External Access |
 
 - Iceberg table: **open-format, Snowflake-managed** (`CATALOG='SNOWFLAKE'` —
   Iceberg spec files on Snowflake storage, loaded from Parquet on
@@ -216,6 +219,7 @@ SHOW GRANTS TO ROLE FR_BI_ANALYST;  -- must contain no STAGING_SCHEMA entries
 SELECT COUNT(*) FROM SUPERINTENDENCY_DEMO_DB.STAGING_SCHEMA.TRANSACCIONES;      -- 18000
 SELECT COUNT(*) FROM SUPERINTENDENCY_DEMO_DB.CORE_BANKING_SCHEMA.CLIENT_PROFILE_DIM; -- 600
 SELECT COUNT(*) FROM SUPERINTENDENCY_DEMO_DB.CORTEX_VECTOR_STORE.DOCUMENTS;    -- demo rows available
+SELECT COUNT(*) FROM SUPERINTENDENCY_DEMO_DB.STAGING_SCHEMA.API_RAW_CURRENCY_DATA;   -- +1 per CALL (Session 4)
 ```
 
 Persona isolation check (as `FR_BI_ANALYST`):
