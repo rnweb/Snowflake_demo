@@ -231,7 +231,7 @@ resource "snowflake_grant_privileges_to_account_role" "engineer_vector_store_bui
 resource "snowflake_grant_privileges_to_account_role" "engineer_api_integration_usage" {
   account_role_name = snowflake_account_role.engineer.name
   privileges        = ["USAGE"]
-  on_object {
+  on_account_object {
     object_type = "INTEGRATION"
     object_name = snowflake_external_access_integration.api_currency_integration.fully_qualified_name
   }

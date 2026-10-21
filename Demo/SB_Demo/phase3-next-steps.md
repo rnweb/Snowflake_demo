@@ -1,7 +1,12 @@
 # Phase 3 — Next Steps: Data, Logic & App Delivery
 
-> **Status:** Phase 2 (Terraform IaC) is **complete** — `terraform plan` reports
-> *"No changes. Your infrastructure matches the configuration."* (64 resources).
+> **Status:** Phase 2 (Terraform IaC) is **complete** — 62 resources applied on
+> the current trial account `zkdcmqh-fjc41457` (61 core + Session 4 Network
+> Rule); the Session 4 External Access Integration + `USAGE` grant are coded
+> and plan-clean but **blocked by account gate `509009`** (External Access not
+> supported on trial accounts — see Session 4). On an account with External
+> Access entitlement, `terraform plan` reports *"No changes"* at **64
+> resources**.
 
 Phase 3 delivers everything Terraform deliberately does **not** manage: data,
 transformation logic and application code. Per the separation of concerns, these
@@ -151,11 +156,15 @@ hooks for the external orchestrator (Informatica IDMC):
 2. **Outbound — Snowflake SQL API** over the governed mart (masked PII under
    `FR_BI_ANALYST`): follow-up deliverable, not yet in this repo.
 
-> **Validation pending:** the procedure has not been executed end-to-end on the
-> trial account (External Access availability unverified there). If the account
-> blocks it, document the exact gate here like the Cortex `399258` one — never
-> claim a call ran when it didn't.
-
+> **Verified account gate (2026-10-21, `zkdcmqh-fjc41457`):** `terraform
+> apply` created `API_CURRENCY_NETWORK_RULE` (state: 62/64) but the External
+> Access Integration failed with `509009 (0A000): SQL compilation error:
+> External access is not supported for trial accounts.`; the engineer `USAGE`
+> grant cannot apply until the integration exists, and the SQL script
+> (Step 2) was **not** run — `CREATE PROCEDURE` requires the integration, so
+> the `CALL` has never executed here. Complete on a non-trial account
+> (apply → `01_api_ingestion_procedure.sql` → `Ingesta OK: <n> bytes …`) and
+> record the evidence here. Never claim a call ran when it didn't.
 
 ## Guardrails to keep in Phase 3
 

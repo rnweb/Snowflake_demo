@@ -19,6 +19,14 @@ Run from `Demo/SB_Demo/terraform` with the full `SNOWFLAKE_*` env block:
 > integration, `CREATE PROCEDURE` fails with an invalid-parameter error on
 > `EXTERNAL_ACCESS_INTEGRATIONS`.
 
+> **Account gate (verified 2026-10-21):** on the trial account
+> `zkdcmqh-fjc41457`, `terraform apply` creates `API_CURRENCY_NETWORK_RULE`
+> (62/64 resources live) but stops on the integration with
+> `509009 (0A000): SQL compilation error: External access is not supported
+> for trial accounts.` The engineer `USAGE` grant cannot apply until the
+> integration exists. Re-run Step 1 on an account with External Access
+> entitlement (non-trial / contractual) before Step 2.
+
 ## Step 2 — Create the landing table + procedure
 
 ```bash
@@ -60,10 +68,14 @@ LIMIT 1;
 
 ## Honesty & scope notes
 
-- **Not yet executed end-to-end on the live account** (validation pending on the
-  trial account — this procedure needs External Access, which is unverified
-  there). If the account blocks it, document the exact gate here like the
-  Cortex `399258` one; never claim a call ran when it didn't.
+- **Blocked by account gate, verified 2026-10-21:** `terraform apply` on
+  `zkdcmqh-fjc41457` (trial) created the Network Rule but the External Access
+  Integration failed with Snowflake error `509009` (*External access is not
+  supported for trial accounts*); the `USAGE` grant is consequently not applied
+  and the procedure was **not** created (it requires the integration) — the
+  `CALL` has **not** run on this account. Complete Steps 1-2 on a non-trial
+  account and record the `Ingesta OK: <n> bytes …` evidence here. Never claim
+  a call ran when it didn't.
 - **Outbound (Snowflake SQL API)** over `CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS`
   with the masked `FR_BI_ANALYST` persona is the second half of `C03` —
   delivered in a follow-up, not in this PR.

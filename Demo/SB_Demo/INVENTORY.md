@@ -30,13 +30,12 @@ third-party audit fixes below (`SHOW` commands and `COUNT(*)` per table — see
 | Object | Provisioned by | Purpose |
 |--------|----------------|---------|
 | `SUPERINTENDENCY_DEMO_DB` | `main.tf` | Demo database (all data/AI/governance objects) |
-| `├── STAGING_SCHEMA` | `main.tf` | **Bronze** — raw ingestion layer and Iceberg external tables: Spanish landing tables + dbt staging views + file format/stages |
+| `├── STAGING_SCHEMA` | `main.tf` | **Bronze** — raw ingestion layer and Iceberg external tables: Spanish landing tables + dbt staging views + file format/stages; Session 4: `API_CURRENCY_NETWORK_RULE` + `API_CURRENCY_INTEGRATION` (FX API egress) |
 | `├── CORE_BANKING_SCHEMA` | `main.tf` | **Silver/Gold** — curated dbt models, aggregated entities, and governed data (marts + Iceberg lakehouse table) |
 | `├── RISK_ANALYTICS_SCHEMA` | `main.tf` | Data Science workspaces and Snowpark ML models (Model Registry: `DETECTOR_FRAUDES`) |
 | `├── GOVERNANCE_SCHEMA` | `main.tf` | Masking/RLS policies, tag, `ROLE_MAPPING` |
 | `├── CORTEX_VECTOR_STORE` | `main.tf` | Vector embeddings and document chunks for Cortex RAG retrieval |
 | `CORTEX_NATIVE_APP_DB` | `main.tf` | Native App / Streamlit staging area |
-| `├── API_CURRENCY_NETWORK_RULE` | `main.tf` | Egress allow-list (FX API) bound to external-access integration `API_CURRENCY_INTEGRATION` — Session 4 |
 | `└── PUBLIC` | built-in | `STREAMLIT_STAGE` (app source files) |
 
 ### Warehouses
@@ -95,7 +94,7 @@ FR_TERRAFORM                 # separate IaC-only role (no demo-hierarchy grants)
 | `…STAGING_SCHEMA.STG_TARJETAS_CREDITO` | view | — | dbt (`staging/stg_tarjetas_credito.sql`) |
 | `…STAGING_SCHEMA.STG_TRANSACCIONES` | view | — | dbt (`staging/stg_transacciones.sql`) |
 | `…CORE_BANKING_SCHEMA.HISTORICO_TRANSACCIONES_ICEBERG` | **Iceberg table** | 18 000 | Session 1 `03_iceberg_lakehouse_demo.sql` |
-| `…STAGING_SCHEMA.API_RAW_CURRENCY_DATA` | table | grows +1 per CALL | Session 4 `01_api_ingestion_procedure.sql` | raw FX-API payload (VARIANT) via External Access |
+| `…STAGING_SCHEMA.API_RAW_CURRENCY_DATA` | table | grows +1 per CALL | Session 4 `01_api_ingestion_procedure.sql` — raw FX-API payload (VARIANT) via External Access |
 
 - Iceberg table: **open-format, Snowflake-managed** (`CATALOG='SNOWFLAKE'` —
   Iceberg spec files on Snowflake storage, loaded from Parquet on
