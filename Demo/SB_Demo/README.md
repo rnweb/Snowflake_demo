@@ -14,6 +14,7 @@ data assets, AI models, governance policies) lives in
 | 1 | Lakehouse & Data Engineering | Snowpipe, external stages, dbt project (`dbt build`) |
 | 2 | AI & Analytics | Snowpark ML (fraud model), Cortex AI (ES), Streamlit, MCP server |
 | 3 | Governance & Security | Dynamic Data Masking, Row-Level Security, access grants |
+| 4 | Integrations & APIs (`C03`) | External API ingestion for IDMC (Snowpark + External Access); SQL API outbound next |
 
 ## Separation of Concerns
 
@@ -29,7 +30,7 @@ SB_Demo/
 ├── README.md                      # This file — overview and workflow
 ├── naming-conventions.md          # APPROVED original -> banking persona mapping
 ├── phase1-repository-scan.md      # Scan report: hardcoded names in cloned Quickstarts
-├── phase3-next-steps.md           # Phase 3 runbook (Sessions 1-3, post-IaC)
+├── phase3-next-steps.md           # Phase 3 runbook (Sessions 1-4, post-IaC)
 ├── prompts/                       # Structured prompts fed to the OpenCode agent
 │   ├── 01-workspace-init-cloning.md
 │   ├── 02-refactoring-parameterization.md
@@ -54,7 +55,8 @@ SB_Demo/
 └── scripts/                       # Data & logic (never infrastructure)
     ├── session-1-lakehouse/       # Spanish raw DDL, synthetic loader, presenter README
     ├── session-2-analytics-ai/     # Snowpark ML, Cortex AI, Streamlit app, MCP server
-    └── session-3-governance/      # Policy binding, mapping-table data, validation
+    ├── session-3-governance/      # Policy binding, mapping-table data, validation
+    └── session-4-integrations-apis/ # External API ingestion hook (IDMC), SQL API (C03)
 ```
 
 ## Execution Workflow
