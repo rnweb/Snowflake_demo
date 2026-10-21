@@ -63,9 +63,9 @@ resource "snowflake_network_rule" "api_currency_rule" {
 }
 
 resource "snowflake_external_access_integration" "api_currency_integration" {
-  name                       = "API_CURRENCY_INTEGRATION"
-  enabled                    = true
-  allowed_network_rule_names = [snowflake_network_rule.api_currency_rule.fully_qualified_name]
+  name                  = "API_CURRENCY_INTEGRATION"
+  enabled               = true
+  allowed_network_rules = [snowflake_network_rule.api_currency_rule.fully_qualified_name]
 }
 
 # ---------------------------------------------------------------------------
