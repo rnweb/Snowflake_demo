@@ -72,10 +72,11 @@ GRANT APPLY ROW ACCESS POLICY ON ACCOUNT TO ROLE FR_DEMO_ADMIN;
    RandomForest training, evaluation and registration of
    `RISK_ANALYTICS_SCHEMA.DETECTOR_FRAUDES` (V1), callable from SQL.
 2. **Cortex AI (español)** — `sql/02_cortex_ai_features.sql`, five blocks
-   (`CORTEX.SUMMARIZE`, `CORTEX.TRANSLATE`, `CORTEX.COMPLETE` ×2, vector-store
-   RAG with `CORTEX.EXTRACT_ANSWER(context, question)`) as `FR_DATA_ENGINEER`
-   on `WH_APP_XSMALL`; trial accounts stop at the documented licence gate
-   `399258`.
+   (`AI_SUMMARIZE`, `AI_TRANSLATE`, `AI_COMPLETE` ×2, vector-store
+   RAG with `AI_EMBED` + `AI_EXTRACT` question-answering) as
+   `FR_DATA_ENGINEER` on `WH_CORTEX_LARGE`; verified end-to-end on the
+    Trial Account (Credit Card Attached) (legacy `SNOWFLAKE.CORTEX.*` returns `399270` on new
+   accounts — the script uses the modern `AI_*` namespace).
 3. **MCP server — required for the evaluators** — initialize before the demo:
 
    ```bash

@@ -33,7 +33,7 @@ Core marts keep the **approved** mart names consumed by the governance layer:
 
   | Variable | Value |
   |----------|-------|
-  | `SNOWFLAKE_ACCOUNT` | `RBGXIGI-UAC53151` |
+  | `SNOWFLAKE_ACCOUNT` | `zkdcmqh-fjc41457` |
   | `SNOWFLAKE_USER` | `OPERATIONS` |
   | `SNOWFLAKE_PRIVATE_KEY_PATH` | path to the RSA private key (`.p8`) |
   | `SNOWFLAKE_AUTHENTICATOR` | `SNOWFLAKE_JWT` |
