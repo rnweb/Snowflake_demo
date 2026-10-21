@@ -48,6 +48,27 @@ resource "snowflake_schema" "vector_store" {
 }
 
 # ---------------------------------------------------------------------------
+# External access (Session 4 - Integraciones y APIs / C03)
+# Egress allow-list + integration so SP_INGEST_EXTERNAL_API (bronze loader)
+# can reach the public FX-rates API. The engineer USAGE grant lives in
+# security.tf; the procedure itself is created by the Session 4 SQL script.
+# ---------------------------------------------------------------------------
+resource "snowflake_network_rule" "api_currency_rule" {
+  name       = "API_CURRENCY_NETWORK_RULE"
+  database   = snowflake_database.demo.name
+  schema     = snowflake_schema.staging.name
+  type       = "HOST_PORT"
+  mode       = "EGRESS"
+  value_list = ["api.frankfurter.app"]
+}
+
+resource "snowflake_external_access_integration" "api_currency_integration" {
+  name                  = "API_CURRENCY_INTEGRATION"
+  enabled               = true
+  allowed_network_rules = [snowflake_network_rule.api_currency_rule.fully_qualified_name]
+}
+
+# ---------------------------------------------------------------------------
 # Warehouses
 # ---------------------------------------------------------------------------
 resource "snowflake_warehouse" "ingestion" {

@@ -43,6 +43,7 @@ provider "snowflake" {
     "snowflake_table_resource",
     "snowflake_table_column_masking_policy_application_resource",
     "snowflake_stage_resource",
+    "snowflake_external_access_integration_resource",
   ]
 }
 
