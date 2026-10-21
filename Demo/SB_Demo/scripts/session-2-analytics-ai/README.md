@@ -129,8 +129,8 @@ Run them from a Snowsight worksheet (or any SQL client) as
 **`FR_DATA_ENGINEER`** on **`WH_APP_XSMALL`** (or `WH_CORTEX_LARGE` when the
 account has credits to spare — never the default).
 
-> **Cuenta On-Demand (verificado):** los cinco bloques se ejecutaron de
-> extremo a extremo el 2026-10-21 en la cuenta On-Demand `zkdcmqh-fjc41457`:
+> **Trial Account (Credit Card Attached) (verificado):** los cinco bloques se ejecutaron de
+> extremo a extremo el 2026-10-21 en la Trial Account (Credit Card Attached) `zkdcmqh-fjc41457`:
 > resumen, traducción, veredicto RAC y JSON (bloques 1-4) más el RAG completo
 > (bloque 5: tabla `CORTEX_VECTOR_STORE.DOCUMENTS`, embeddings `AI_EMBED`
 > 768-d, recuperación por `VECTOR_INNER_PRODUCT` y respuesta generada con

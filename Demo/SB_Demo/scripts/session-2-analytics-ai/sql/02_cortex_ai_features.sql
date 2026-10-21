@@ -14,13 +14,13 @@
 --   5. RAG — vector store, embeddings (AI_EMBED) y búsqueda vetorial
 --                      (VECTOR_INNER_PRODUCT + AI_COMPLETE / AI_EXTRACT)
 --
--- NOTA (cuenta nueva / On-Demand): en cuentas creadas recientemente las
+-- NOTA (cuenta nueva / Trial Account (Credit Card Attached)): en cuentas creadas recientemente las
 -- funciones heredadas SNOWFLAKE.CORTEX.* (SUMMARIZE, TRANSLATE, COMPLETE,
 -- EMBED, EXTRACT_ANSWER) están bloqueadas con el error 399270
 -- "New accounts are blocked from using legacy SNOWFLAKE.CORTEX functions".
 -- Este script usa el espacio de nombres moderno AI_* (AI_SUMMARIZE,
 -- AI_TRANSLATE, AI_COMPLETE, AI_EMBED, AI_EXTRACT), verificado extremo a
--- extremo en la cuenta On-Demand. El resto de la demo (datos, marts, RBAC,
+-- extremo en la Trial Account (Credit Card Attached). El resto de la demo (datos, marts, RBAC,
 -- modelo ML) no depende de estas consultas.
 -- =============================================================================
 
@@ -100,7 +100,7 @@ SELECT AI_COMPLETE(
 -- -----------------------------------------------------------------------------
 -- Bloque RAG: tipo VECTOR nativo, generación de embeddings con AI_EMBED y
 -- funciones de búsqueda vetorial (VECTOR_INNER_PRODUCT + AI_COMPLETE/AI_EXTRACT).
--- Este bloque habilita un patrón RAG completo en la cuenta On-Demand.
+-- Este bloque habilita un patrón RAG completo en la Trial Account (Credit Card Attached).
 --
 -- El schema CORTEX_VECTOR_STORE es provisionado por Terraform (IaC), no por SQL.
 -- Antes de ejecutar este bloque 5, debes correr `terraform apply` para crear el

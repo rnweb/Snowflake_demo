@@ -10,7 +10,7 @@ evaluates it and registers it in the Snowflake Model Registry
 Role: FR_DATA_ENGINEER (override: SNOWFLAKE_ROLE)
 Warehouse: WH_APP_XSMALL (override: SNOWFLAKE_WAREHOUSE) — training only moves
 the mart over the wire and fits client-side; the expensive WH_CORTEX_LARGE is
-reserved for workloads that actually need it (cost guardrail).
+reserved for workloads that actually need it (trial-credit guardrail).
 
 Note on labels: the synthetic dataset has no real fraud outcomes, so the
 target ES_FRAUDE is a documented *proxy label* derived from business rules

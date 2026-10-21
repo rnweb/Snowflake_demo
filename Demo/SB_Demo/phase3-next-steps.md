@@ -69,7 +69,7 @@ GRANT APPLY ROW ACCESS POLICY ON ACCOUNT TO ROLE FR_DEMO_ADMIN;
    (`AI_SUMMARIZE`, `AI_TRANSLATE`, `AI_COMPLETE` ×2, vector-store
    RAG with `AI_EMBED` + `AI_EXTRACT` question-answering) as
    `FR_DATA_ENGINEER` on `WH_CORTEX_LARGE`; verified end-to-end on the
-   On-Demand account (legacy `SNOWFLAKE.CORTEX.*` returns `399270` on new
+    Trial Account (Credit Card Attached) (legacy `SNOWFLAKE.CORTEX.*` returns `399270` on new
    accounts — the script uses the modern `AI_*` namespace).
 3. **MCP server — required for the evaluators** — initialize before the demo:
 
