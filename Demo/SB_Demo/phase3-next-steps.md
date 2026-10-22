@@ -155,17 +155,23 @@ hooks for the external orchestrator (Informatica IDMC):
    ```
 
 2. **Outbound — Snowflake SQL API** over the governed mart (masked PII under
-   `FR_BI_ANALYST`): follow-up deliverable, not yet in this repo.
+   `FR_BI_ANALYST`): IDMC REST-connector payload (`POST /api/v2/statements`,
+   `KEYPAIR_JWT` auth, JSON body) documented in
+   `session-4-integrations-apis/README.md` and handed to Guilherme —
+   execution pending.
 
-> **Verified account gate (2026-10-21, `zkdcmqh-fjc41457`):** `terraform
-> apply` created `API_CURRENCY_NETWORK_RULE` (state: 62/64) but the External
-> Access Integration failed with `509009 (0A000): SQL compilation error:
-> External access is not supported for trial accounts.`; the engineer `USAGE`
-> grant cannot apply until the integration exists, and the SQL script
-> (Step 2) was **not** run — `CREATE PROCEDURE` requires the integration, so
-> the `CALL` has never executed here. Complete on a non-trial account
-> (apply → `01_api_ingestion_procedure.sql` → `Ingesta OK: <n> bytes …`) and
-> record the evidence here. Never claim a call ran when it didn't.
+> **Verified account gate (2026-10-21, Trial Account (Credit Card Attached)
+> `zkdcmqh-fjc41457`):** `terraform apply` created `API_CURRENCY_NETWORK_RULE`
+> (state: 62/64) but the External Access Integration failed with `509009
+> (0A000): SQL compilation error: External access is not supported for trial
+> accounts.` — **ENA is explicitly blocked on trial accounts even with a
+> credit card attached, which is why `API_CURRENCY_INTEGRATION` remains
+> unapplied.** The engineer `USAGE` grant cannot apply until the integration
+> exists, and the SQL script (Step 2) was **not** run — `CREATE PROCEDURE`
+> requires the integration, so the `CALL` has never executed here. Complete
+> on a non-trial account (apply → `01_api_ingestion_procedure.sql` →
+> `Ingesta OK: <n> bytes …`) and record the evidence here. Never claim a
+> call ran when it didn't.
 
 ## Guardrails to keep in Phase 3
 

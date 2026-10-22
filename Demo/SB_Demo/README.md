@@ -14,7 +14,7 @@ data assets, AI models, governance policies) lives in
 | 1 | Lakehouse & Data Engineering | Snowpipe, external stages, dbt project (`dbt build`) |
 | 2 | AI & Analytics | Snowpark ML (fraud model), Cortex AI (ES), Streamlit, MCP server |
 | 3 | Governance & Security | Dynamic Data Masking, Row-Level Security, access grants |
-| 4 | Integrations & APIs (`C03`) | External API ingestion for IDMC (Snowpark + External Access); SQL API outbound next |
+| 4 | Integrations & APIs (`C03`) | External API ingestion for IDMC (Snowpark + External Access, ENA trial-gated); SQL API outbound payload documented |
 
 ## Separation of Concerns
 
