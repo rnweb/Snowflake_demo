@@ -47,7 +47,8 @@ GRANT APPLY ROW ACCESS POLICY ON ACCOUNT TO ROLE FR_DEMO_ADMIN;
 
    Generates synthetic data (seed 42), creates `CLIENTES` /
    `TARJETAS_CREDITO` / `TRANSACCIONES` in `STAGING_SCHEMA`, PUT + `COPY INTO`
-   as `FR_DATA_ENGINEER` on `WH_INGESTION_XSMALL` (600 / 928 / 18,000 rows).
+    as `FR_DATA_ENGINEER` on `WH_INGESTION_MEDIUM` (600 / 928 / 50 000 000 rows — PG-06
+    generator: `session-1/sql/04_generator_50m_transacciones.sql` + `dbt build --full-refresh`).
 2. **dbt** — `dbt/profiles.yml` pins `role: FR_DATA_ENGINEER`,
    `database: SUPERINTENDENCY_DEMO_DB`, `warehouse: WH_INGESTION_XSMALL`:
 

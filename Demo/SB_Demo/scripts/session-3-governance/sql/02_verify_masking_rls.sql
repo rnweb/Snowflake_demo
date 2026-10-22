@@ -11,10 +11,10 @@
 -- FR_DATA_ENGINEER's raw-layer privileges (STAGING_SCHEMA).
 --
 -- Expected results:
---   FR_DEMO_ADMIN  -> RUT y NUMERO_TARJETA en claro, 3 unidades, 18 000 filas
+--   FR_DEMO_ADMIN  -> RUT y NUMERO_TARJETA en claro, 3 unidades, 50 000 000 filas
 --   FR_BI_ANALYST  -> RUT como pseudónimo determinista ***-**-<12 hex>
 --                     (mismo token que la dim → joins/filtros siguen casando),
---                     tarjeta '****-****-****-****', solo RETAIL (5 849 filas),
+--                     tarjeta '****-****-****-****', solo RETAIL (15 969 793 filas),
 --                     misma SQL sin cambios de app
 -- Note: the RUT mask is deterministic, so WHERE RUT = '<token>' still matches
 -- for non-admin roles (predicates run on the post-policy value).

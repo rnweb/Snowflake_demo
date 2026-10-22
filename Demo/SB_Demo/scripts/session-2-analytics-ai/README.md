@@ -83,6 +83,11 @@ e.g. `WH_CORTEX_LARGE` for parallel training benches):
 [3/5] RandomForest trained (80/20 split, seed=42)
 [4/5] evaluation: EVALUADOS=3651 ACCURACY=0.9310 RECALL=0.4404 PRECISION=0.7608
 [5/5] registered SUPERINTENDENCY_DEMO_DB.RISK_ANALYTICS_SCHEMA.DETECTOR_FRAUDES (V1)
+```
+
+> Transcript of the original 18 000-row training run (labels/eval as shown).
+> The mart holds **50 000 000** rows since PG-06 (2026-10-21) — retrain
+> `python/01_train_fraud_model.py` to refresh the evaluation set.
 
 --- SQL inference example (model is callable from SQL) ---
 SELECT MODEL(SUPERINTENDENCY_DEMO_DB.RISK_ANALYTICS_SCHEMA.DETECTOR_FRAUDES, V1)!predict(

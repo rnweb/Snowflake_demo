@@ -89,17 +89,18 @@ FR_TERRAFORM                 # separate IaC-only role (no demo-hierarchy grants)
 |---------------------|------|------|------------|
 | `SUPERINTENDENCY_DEMO_DB.STAGING_SCHEMA.CLIENTES` | table | 600 | Session 1 + synthetic loader |
 | `…STAGING_SCHEMA.TARJETAS_CREDITO` | table | 928 | Session 1 + synthetic loader |
-| `…STAGING_SCHEMA.TRANSACCIONES` | table | 18 000 | Session 1 + synthetic loader |
+| `…STAGING_SCHEMA.TRANSACCIONES` | table | 50 000 000 | Session 1 loader + PG-06 `04_generator_50m_transacciones.sql` |
 | `…STAGING_SCHEMA.STG_CLIENTES` | view | — | dbt (`staging/stg_clientes.sql`) |
 | `…STAGING_SCHEMA.STG_TARJETAS_CREDITO` | view | — | dbt (`staging/stg_tarjetas_credito.sql`) |
 | `…STAGING_SCHEMA.STG_TRANSACCIONES` | view | — | dbt (`staging/stg_transacciones.sql`) |
-| `…CORE_BANKING_SCHEMA.HISTORICO_TRANSACCIONES_ICEBERG` | **Iceberg table** | 18 000 | Session 1 `03_iceberg_lakehouse_demo.sql` |
+| `…CORE_BANKING_SCHEMA.HISTORICO_TRANSACCIONES_ICEBERG` | **Iceberg table** | 18 000 | Session 1 `03_iceberg_lakehouse_demo.sql` (seed snapshot — raw/gold since scaled to 50 000 000, PG-06) |
 | `…STAGING_SCHEMA.API_RAW_CURRENCY_DATA` | table | grows +1 per CALL | Session 4 `01_api_ingestion_procedure.sql` — raw FX-API payload (VARIANT) via External Access |
 
 - Iceberg table: **open-format, Snowflake-managed** (`CATALOG='SNOWFLAKE'` —
   Iceberg spec files on Snowflake storage, loaded from Parquet on
   `ICEBERG_DEMO_STAGE`, 3 files, 518 744 bytes); row parity with the raw mart
-  verified (`is_iceberg='Y'`). Reading it from *external* engines would need an
+  verified at seed time (`is_iceberg='Y'`) — since PG-06 (2026-10-21) the raw
+  mart holds 50 000 000 rows while this seed snapshot stays at 18 000. Reading it from *external* engines would need an
   **External Volume** (cloud-storage credentials) — a documented future
   extension, not provisioned in this demo.
 - No masking or RLS policies are attached to this layer — and since the
@@ -114,12 +115,13 @@ FR_TERRAFORM                 # separate IaC-only role (no demo-hierarchy grants)
 | Object (exact name) | Type | Rows | Created by | Governance |
 |---------------------|------|------|------------|------------|
 | `…CORE_BANKING_SCHEMA.CLIENT_PROFILE_DIM` | table (dbt `client_profile_dim`) | 600 | `dbt build` | `RUT` → `MASK_NATIONAL_ID` |
-| `…CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS` | incremental (dbt `credit_card_transactions`) | 18 000 | `dbt build` | `RUT` → `MASK_NATIONAL_ID` (deterministic); `NUMERO_TARJETA` → `MASK_CREDIT_CARD`; `UNIDAD_NEGOCIO` → `RLS_BUSINESS_UNIT` |
+| `…CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS` | incremental (dbt `credit_card_transactions`) | 50 000 000 | `dbt build --full-refresh` | `RUT` → `MASK_NATIONAL_ID` (deterministic); `NUMERO_TARJETA` → `MASK_CREDIT_CARD`; `UNIDAD_NEGOCIO` → `RLS_BUSINESS_UNIT` |
 | `…GOVERNANCE_SCHEMA.ROLE_MAPPING` | table | 4 | `governance.tf` DDL + Session 3 seed | RLS lookup: role → business unit |
 | `…CORTEX_VECTOR_STORE.DOCUMENTS` | table | demo set | Session 2 SQL | embeddings and vector search context |
 
-Mart facts: `UNIDAD_NEGOCIO` = PYME 6 223 / CORPORATIVO 5 928 / RETAIL 5 849;
-`ESTADO` = APROBADA 15 282 / RECHAZADA 1 851 / PENDIENTE 867.
+Mart facts: `UNIDAD_NEGOCIO` = PYME 17 523 213 / CORPORATIVO 16 506 994 / RETAIL 15 969 793;
+`ESTADO` = APROBADA 42 495 623 / RECHAZADA 5 001 766 / PENDIENTE 2 502 611
+(85 / 10 / 5 split, PG-06 generator).
 
 ---
 
@@ -153,9 +155,9 @@ Attachment switch: `terraform/terraform.tfvars` → `attach_policies_to_tables =
 
 | Persona | PII (`RUT` / `NUMERO_TARJETA`) | Transaction rows | Build objects |
 |---------|-------------------------------|------------------|---------------|
-| `FR_DEMO_ADMIN` / `ACCOUNTADMIN` | plaintext (policy bypass) | 18 000 (PYME+CORPORATIVO+RETAIL) | yes |
-| `FR_DATA_ENGINEER` | pseudonym `***-**-<12 hex>` / masked `****-****-****-****` | 18 000 (all units — dbt/ML keep working) | yes |
-| `FR_BI_ANALYST` | pseudonym `***-**-<12 hex>` / masked `****-****-****-****` | 5 849 (RETAIL only) | no (read-only) |
+| `FR_DEMO_ADMIN` / `ACCOUNTADMIN` | plaintext (policy bypass) | 50 000 000 (PYME 17 523 213 + CORPORATIVO 16 506 994 + RETAIL 15 969 793) | yes |
+| `FR_DATA_ENGINEER` | pseudonym `***-**-<12 hex>` / masked `****-****-****-****` | 50 000 000 (all units — dbt/ML keep working) | yes |
+| `FR_BI_ANALYST` | pseudonym `***-**-<12 hex>` / masked `****-****-****-****` | 15 969 793 (RETAIL only) | no (read-only) |
 
 Policy subqueries run with the policy owner's privileges, so `FR_BI_ANALYST`
 needs **no** governance grants of its own.
@@ -180,7 +182,7 @@ needs **no** governance grants of its own.
   `USE SECONDARY ROLES NONE` (`scripts/session-3-governance/sql/02_verify_masking_rls.sql`,
   `scripts/session-2-analytics-ai/python/mcp_server.py`); verified live:
   `SELECT COUNT(*) …STAGING_SCHEMA.CLIENTES` **fails with `002003`** for the
-  isolated analyst session while the core mart stays readable (5 849 RETAIL
+  isolated analyst session while the core mart stays readable (15 969 793 RETAIL
   rows).
 - **Fact-table RUT masked (2026-10-15 audit).** `CREDIT_CARD_TRANSACTIONS.RUT`
   previously exposed plaintext PII while the dim column was masked (same
@@ -215,7 +217,8 @@ SHOW TAGS IN DATABASE SUPERINTENDENCY_DEMO_DB;
 SHOW MODELS IN SCHEMA SUPERINTENDENCY_DEMO_DB.RISK_ANALYTICS_SCHEMA;
 SHOW STREAMLITS IN DATABASE CORTEX_NATIVE_APP_DB;  -- PANEL_PREVENCION_FRAUDE (deployed)
 SHOW GRANTS TO ROLE FR_BI_ANALYST;  -- must contain no STAGING_SCHEMA entries
-SELECT COUNT(*) FROM SUPERINTENDENCY_DEMO_DB.STAGING_SCHEMA.TRANSACCIONES;      -- 18000
+SELECT COUNT(*) FROM SUPERINTENDENCY_DEMO_DB.STAGING_SCHEMA.TRANSACCIONES;      -- 50000000 (PG-06)
+SELECT COUNT(*) FROM SUPERINTENDENCY_DEMO_DB.CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS; -- 50000000 (RLS-restricted for FR_BI_ANALYST)
 SELECT COUNT(*) FROM SUPERINTENDENCY_DEMO_DB.CORE_BANKING_SCHEMA.CLIENT_PROFILE_DIM; -- 600
 SELECT COUNT(*) FROM SUPERINTENDENCY_DEMO_DB.CORTEX_VECTOR_STORE.DOCUMENTS;    -- demo rows available
 SELECT COUNT(*) FROM SUPERINTENDENCY_DEMO_DB.STAGING_SCHEMA.API_RAW_CURRENCY_DATA;   -- +1 per CALL (Session 4)

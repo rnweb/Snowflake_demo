@@ -65,6 +65,10 @@ The script (deterministic seed 42) generates the CSVs, runs
 Session 1 raw ingestion complete.
 ```
 
+> Transcript of the original 18 000-row loader run. PG-06 (2026-10-21)
+> subsequently scaled `STAGING_SCHEMA.TRANSACCIONES` to **50 000 000** rows
+> with `sql/04_generator_50m_transacciones.sql` + `dbt build --full-refresh`.
+
 Re-running is safe: raw tables are truncated and reloaded, and all dbt models
 are rebuilt by `dbt build`.
 
@@ -99,8 +103,9 @@ Run as **`FR_DATA_ENGINEER`** on **`WH_INGESTION_XSMALL`**. The script is
 self-contained and re-runnable (`IF NOT EXISTS`, `TRUNCATE`, `OVERWRITE`):
 
 1. Creates the internal stage `STAGING_SCHEMA.ICEBERG_DEMO_STAGE`
-2. Exports all 18 000 mart rows to the stage as **Parquet**
-   (`data_0_0_0.snappy.parquet`, ~518 KB)
+2. Exports all mart rows to the stage as **Parquet**
+   (18 000 rows / `data_0_0_0.snappy.parquet`, ~518 KB at the original run —
+   the mart holds 50 000 000 since PG-06)
 3. Creates `CORE_BANKING_SCHEMA.HISTORICO_TRANSACCIONES_ICEBERG` with
    `CREATE ICEBERG TABLE ... CATALOG = 'SNOWFLAKE'`
 4. Loads the full history into it
@@ -110,7 +115,7 @@ Verification (expected results):
 | Check | Expected |
 |-------|----------|
 | `SHOW TABLES LIKE 'HISTORICO%'` | `is_iceberg = 'Y'` (Snowsight shows the Iceberg badge) |
-| Row parity query | `FUENTE = 18000`, `ICEBERG = 18000` |
+| Row parity query | `FUENTE = 18000`, `ICEBERG = 18000` (original seed — `FUENTE` is 50 000 000 since PG-06) |
 | `LIST @...ICEBERG_DEMO_STAGE/historico_transacciones/` | `data_0_0_0.snappy.parquet` |
 
 Presenter talking points:
