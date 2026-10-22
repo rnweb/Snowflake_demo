@@ -1,0 +1,112 @@
+# ============================================================================
+# SB Demo — C05 DevOps de Datos: CI/CD for the dbt project
+# ============================================================================
+#   PR to main  -> stage Validate   (dbt build in DEV: contract + data tests)
+#   merge/main  -> Validate -> Deploy_PROD (manual approval on environment
+#                  SB-PROD) -> verify -> DEPLOYMENT_LOG row
+#   tag v*      -> same path: run the pipeline on the stable tag = rollback
+#
+# Azure Repos PR validation comes from the main branch policy ("Build
+# validation"), not from a `pr:` block. Secrets live in the variable group
+# `sb-demo-snowflake` (SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER, SNOWFLAKE_PASSWORD).
+# ============================================================================
+
+trigger:
+  branches:
+    include: [main]
+  tags:
+    include: ['v*']
+  paths:
+    include: [Demo/SB_Demo/dbt/*, Demo/SB_Demo/cicd/*]
+
+parameters:
+  - name: agentPool
+    displayName: Agent pool (self-hosted until the free hosted grant arrives)
+    type: string
+    default: SB-Demo-SelfHosted
+    values: [SB-Demo-SelfHosted, Azure Pipelines]
+
+variables:
+  - group: sb-demo-snowflake
+  - name: DBT_DIR
+    value: $(Build.SourcesDirectory)/Demo/SB_Demo/dbt
+  - name: DBT_SELECT
+    value: tag:cicd
+
+stages:
+  # --------------------------------------------------------------------------
+  - stage: Validate
+    displayName: Validate (DEV)
+    jobs:
+      - job: dbt_ci
+        displayName: dbt contract + tests on DEV clone
+        pool:
+          ${{ if eq(parameters.agentPool, 'Azure Pipelines') }}:
+            vmImage: ubuntu-latest
+          ${{ else }}:
+            name: ${{ parameters.agentPool }}
+        steps:
+          - checkout: self
+          - script: |
+              python3 -m venv .venv && . .venv/bin/activate
+              pip install --quiet "dbt-core==1.12.6" "dbt-snowflake==1.9.4"
+              dbt --version
+            displayName: Install dbt
+          - script: |
+              . .venv/bin/activate && cd "$(DBT_DIR)"
+              dbt debug --profiles-dir . --target ci_dev
+              dbt parse --profiles-dir . --target ci_dev
+              dbt build --profiles-dir . --target ci_dev --select $(DBT_SELECT)
+            displayName: Schema contract + data quality (dbt build)
+            env:
+              SNOWFLAKE_ACCOUNT: $(SNOWFLAKE_ACCOUNT)
+              SNOWFLAKE_USER: $(SNOWFLAKE_USER)
+              SNOWFLAKE_PASSWORD: $(SNOWFLAKE_PASSWORD)
+          - task: PublishPipelineArtifact@1
+            displayName: Package artifact (dbt project + manifest)
+            inputs:
+              targetPath: $(Build.SourcesDirectory)/Demo/SB_Demo/dbt
+              artifact: dbt_package
+
+  # --------------------------------------------------------------------------
+  - stage: Deploy_PROD
+    displayName: Deploy PROD (approval gate)
+    dependsOn: Validate
+    condition: >
+      and(succeeded(),
+          or(eq(variables['Build.SourceBranch'], 'refs/heads/main'),
+             startsWith(variables['Build.SourceBranch'], 'refs/tags/v')))
+    jobs:
+      - deployment: dbt_cd
+        displayName: dbt deploy to PROD
+        environment: SB-PROD          # approval check configured in the UI
+        pool:
+          ${{ if eq(parameters.agentPool, 'Azure Pipelines') }}:
+            vmImage: ubuntu-latest
+          ${{ else }}:
+            name: ${{ parameters.agentPool }}
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - download: current
+                  artifact: dbt_package
+                - script: |
+                    python3 -m venv .venv && . .venv/bin/activate
+                    pip install --quiet "dbt-core==1.12.6" "dbt-snowflake==1.9.4"
+                    cd "$(Pipeline.Workspace)/dbt_package"
+                    dbt build --profiles-dir . --target ci_prod --select $(DBT_SELECT)
+                  displayName: Deploy + verify (dbt build PROD)
+                  env:
+                    SNOWFLAKE_ACCOUNT: $(SNOWFLAKE_ACCOUNT)
+                    SNOWFLAKE_USER: $(SNOWFLAKE_USER)
+                    SNOWFLAKE_PASSWORD: $(SNOWFLAKE_PASSWORD)
+                - script: |
+                    . .venv/bin/activate && cd "$(Pipeline.Workspace)/dbt_package"
+                    dbt run-operation log_deployment --profiles-dir . --target ci_prod \
+                      --args "{build_id: '$(Build.BuildNumber)', commit: '$(Build.SourceVersion)', author: '$(Build.RequestedFor)', source_ref: '$(Build.SourceBranchName)'}"
+                  displayName: Traceability (DEPLOYMENT_LOG + view comment)
+                  env:
+                    SNOWFLAKE_ACCOUNT: $(SNOWFLAKE_ACCOUNT)
+                    SNOWFLAKE_USER: $(SNOWFLAKE_USER)
+                    SNOWFLAKE_PASSWORD: $(SNOWFLAKE_PASSWORD)

@@ -1,0 +1,36 @@
+version: 2
+
+models:
+  - name: vw_resumen_unidad_negocio
+    description: >
+      C05 CI/CD artifact. Official rejection-rate KPI per business unit.
+      Contract enforced: the pipeline fails if a column name or type drifts
+      (schema validation); tests below are the data-quality gate.
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: UNIDAD_NEGOCIO
+        data_type: varchar
+        tests:
+          - not_null
+          - unique
+          - accepted_values:
+              arguments:
+                values: ['CORPORATIVO', 'RETAIL', 'PYME']
+      - name: QTD_TRANSACCIONES
+        data_type: number
+        tests:
+          - not_null
+      - name: QTD_RECHAZADAS
+        data_type: number
+        tests:
+          - not_null
+      - name: TASA_RECHAZO
+        data_type: number
+        tests:
+          - not_null
+      - name: MONTO_TOTAL
+        data_type: number
+        tests:
+          - not_null

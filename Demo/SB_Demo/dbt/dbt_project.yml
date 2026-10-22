@@ -34,3 +34,10 @@ models:
     core:
       +materialized: table
       +schema: CORE_BANKING_SCHEMA
+    # C05 CI/CD artifact. Views only: they never replace the governed core
+    # tables (CREATE OR REPLACE TABLE would drop the Terraform-attached
+    # masking policies) and they keep RLS, which is evaluated for the caller.
+    analytics:
+      +materialized: view
+      +schema: RISK_ANALYTICS_SCHEMA
+      +tags: ["cicd"]
