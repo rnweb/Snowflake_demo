@@ -270,7 +270,7 @@ def main() -> None:
               (18.000 transacciones sintéticas)
             - **Modelo**: `DETECTOR_FRAUDES` (RandomForest, V1)
             - **Rol**: `FR_DATA_ENGINEER` (con repuesto al rol de despliegue)
-            - **Almacén**: `WH_APP_XSMALL`
+            - **Almacén**: `WH_APP_MEDIUM`
             """
         )
         st.caption(

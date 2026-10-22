@@ -3,7 +3,7 @@
 -- ============================================================================
 -- Audience : Data Engineers / Architects — Superintendency of Banks
 -- Layer    : SUPERINTENDENCY_DEMO_DB.STAGING_SCHEMA (raw landing zone)
--- Compute  : WH_INGESTION_XSMALL
+-- Compute  : WH_INGESTION_MEDIUM
 -- Role     : FR_DATA_ENGINEER
 --
 -- Generates 50 000 000 synthetic transactions in-Snowflake (TABLE(GENERATOR))
@@ -14,7 +14,7 @@
 -- cities, 85/10/5 estado split, CLP amount range) mirror the Session 1
 -- Python loader so downstream dbt accepted_values tests keep passing.
 --
--- Usage (as FR_DATA_ENGINEER on WH_INGESTION_XSMALL):
+-- Usage (as FR_DATA_ENGINEER on WH_INGESTION_MEDIUM):
 --   1. Run this file, then SWAP + DROP the legacy 18k table (statements below).
 --   2. Run `dbt build --full-refresh` (the gold model is incremental — a
 --      plain build would only pick rows newer than the old max timestamp).

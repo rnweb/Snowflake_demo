@@ -52,8 +52,8 @@ to filter as `FR_BI_ANALYST`.
   (3 column-policy applications)
 - Environment: `SNOWFLAKE_ACCOUNT`, `SNOWFLAKE_USER` (key-pair),
   `SNOWFLAKE_PRIVATE_KEY_PATH`
-- Role: `FR_DEMO_ADMIN` (granted to `OPERATIONS`), warehouse: `WH_APP_XSMALL`
-  (the analyst has no `WH_INGESTION_XSMALL` grant)
+- Role: `FR_DEMO_ADMIN` (granted to `OPERATIONS`), warehouse: `WH_APP_MEDIUM`
+  (the analyst has no `WH_INGESTION_MEDIUM` grant)
 
 ## Step 1 — Seed + RLS binding
 

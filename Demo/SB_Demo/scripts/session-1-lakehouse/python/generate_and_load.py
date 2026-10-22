@@ -5,7 +5,7 @@ Quickstart schema: CUSTOMERS / CREDIT_CARDS / TRANSACTIONS), PUTs them to an
 internal stage and runs COPY INTO the STAGING_SCHEMA raw tables.
 
 Role: FR_DATA_ENGINEER (override: SNOWFLAKE_ROLE)
-Warehouse: WH_INGESTION_XSMALL (override: SNOWFLAKE_WAREHOUSE)
+Warehouse: WH_INGESTION_MEDIUM (override: SNOWFLAKE_WAREHOUSE)
 
 Environment (no hardcoded users, accounts or key paths — fail-fast if unset):
     required : SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER and one of
@@ -209,7 +209,7 @@ def _connect_kwargs() -> dict:
         "user": _require_env("SNOWFLAKE_USER"),
         "authenticator": os.getenv("SNOWFLAKE_AUTHENTICATOR", "SNOWFLAKE_JWT"),
         "role": os.getenv("SNOWFLAKE_ROLE", "FR_DATA_ENGINEER"),
-        "warehouse": os.getenv("SNOWFLAKE_WAREHOUSE", "WH_INGESTION_XSMALL"),
+        "warehouse": os.getenv("SNOWFLAKE_WAREHOUSE", "WH_INGESTION_MEDIUM"),
         "database": "SUPERINTENDENCY_DEMO_DB",
         "schema": "STAGING_SCHEMA",
         "login_timeout": 20,

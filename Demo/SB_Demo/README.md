@@ -112,7 +112,7 @@ in `scripts/`:
 | `SNOWFLAKE_PRIVATE_KEY` | one of the two | PEM contents (CI secret stores) |
 | `SNOWFLAKE_AUTHENTICATOR` | no | default `SNOWFLAKE_JWT` |
 | `SNOWFLAKE_ROLE` | no | defaults per script (`FR_DATA_ENGINEER`, MCP `FR_BI_ANALYST`) |
-| `SNOWFLAKE_WAREHOUSE` | no | default `WH_APP_XSMALL` (`generate_and_load` → `WH_INGESTION_XSMALL`) — never `WH_CORTEX_LARGE` |
+| `SNOWFLAKE_WAREHOUSE` | no | default `WH_APP_MEDIUM` (`generate_and_load` → `WH_INGESTION_MEDIUM`) — never `WH_TRANSFORM_LARGE` |
 | `SNOWFLAKE_DISABLE_OCSP` | no | default `true` (OCSP responder unreachable from the demo network); set `false` to enforce |
 
 !!! warning "Security Guardrails"

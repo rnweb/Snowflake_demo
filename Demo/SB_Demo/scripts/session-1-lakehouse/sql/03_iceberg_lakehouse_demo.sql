@@ -1,7 +1,7 @@
 -- =============================================================================
 -- Session 1 — 03: Apache Iceberg lakehouse demo (open table format)
 -- =============================================================================
--- Rol: FR_DATA_ENGINEER | Almacén: WH_INGESTION_XSMALL
+-- Rol: FR_DATA_ENGINEER | Almacén: WH_INGESTION_MEDIUM
 --
 -- Purpose: prove that Snowflake acts as a true Data Lakehouse over OPEN
 -- formats — the same Parquet files on an internal stage remain readable by

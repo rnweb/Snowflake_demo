@@ -3,7 +3,7 @@
 -- ============================================================================
 -- Audience : Data Engineers / Architects — Superintendency of Banks
 -- Layer    : SUPERINTENDENCY_DEMO_DB.STAGING_SCHEMA (raw landing zone)
--- Compute  : WH_INGESTION_XSMALL
+-- Compute  : WH_INGESTION_MEDIUM
 -- Role     : FR_DATA_ENGINEER
 --
 -- Logical mapping from the official Snowflake Quickstarts:

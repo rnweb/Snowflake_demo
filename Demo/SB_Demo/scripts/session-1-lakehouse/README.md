@@ -52,13 +52,13 @@ python Demo/SB_Demo/scripts/session-1-lakehouse/python/generate_and_load.py
 The script (deterministic seed 42) generates the CSVs, runs
 `sql/01_create_raw_tables.sql`, PUTs to `@RAW_STAGE` and executes
 `sql/02_load_raw_data.sql` — all as **`FR_DATA_ENGINEER`** on
-**`WH_INGESTION_XSMALL`**. Expected output:
+**`WH_INGESTION_MEDIUM`**. Expected output:
 
 ```
 [1/4] generated clientes            600 rows ...
 [1/4] generated tarjetas_credito    928 rows ...
 [1/4] generated transacciones     18000 rows ...
-[2/4] connected as FR_DATA_ENGINEER on WH_INGESTION_XSMALL
+[2/4] connected as FR_DATA_ENGINEER on WH_INGESTION_MEDIUM
        STAGING_SCHEMA.clientes              600 rows
        STAGING_SCHEMA.tarjetas_credito      928 rows
        STAGING_SCHEMA.transacciones       18000 rows
@@ -83,7 +83,7 @@ dbt source freshness --profiles-dir .  # 3/3 sources fresh
 ```
 
 - `profiles.yml` pins `role: FR_DATA_ENGINEER`,
-  `database: SUPERINTENDENCY_DEMO_DB`, `warehouse: WH_INGESTION_XSMALL`
+  `database: SUPERINTENDENCY_DEMO_DB`, `warehouse: WH_INGESTION_MEDIUM`
 - Staging layer (`STAGING_SCHEMA`): views `stg_clientes`,
   `stg_tarjetas_credito`, `stg_transacciones`
 - Core layer (`CORE_BANKING_SCHEMA`): `client_profile_dim` (table),
@@ -99,7 +99,7 @@ snowsql -f Demo/SB_Demo/scripts/session-1-lakehouse/sql/03_iceberg_lakehouse_dem
 # ...or paste the file into a Snowsight worksheet
 ```
 
-Run as **`FR_DATA_ENGINEER`** on **`WH_INGESTION_XSMALL`**. The script is
+Run as **`FR_DATA_ENGINEER`** on **`WH_INGESTION_MEDIUM`**. The script is
 self-contained and re-runnable (`IF NOT EXISTS`, `TRUNCATE`, `OVERWRITE`):
 
 1. Creates the internal stage `STAGING_SCHEMA.ICEBERG_DEMO_STAGE`

@@ -21,7 +21,7 @@ live in `scripts/session-*` and are executed with the demo roles — never as
 |---|---|
 | Databases | `SUPERINTENDENCY_DEMO_DB`, `CORTEX_NATIVE_APP_DB` |
 | Schemas | `CORE_BANKING_SCHEMA`, `STAGING_SCHEMA`, `RISK_ANALYTICS_SCHEMA`, `GOVERNANCE_SCHEMA`, `CORTEX_VECTOR_STORE` |
-| Warehouses | `WH_INGESTION_XSMALL`, `WH_CORTEX_LARGE`, `WH_APP_XSMALL` |
+| Warehouses | `WH_INGESTION_MEDIUM`, `WH_TRANSFORM_LARGE`, `WH_APP_MEDIUM` |
 | Roles | `FR_DEMO_ADMIN` → (`FR_DATA_ENGINEER`, `FR_BI_ANALYST`) |
 | Governance | `MASK_NATIONAL_ID`, `MASK_CREDIT_CARD`, `RLS_BUSINESS_UNIT`, `ROLE_MAPPING` table (empty) |
 | RBAC | 37 grant resources — 34 least-privilege grants + 3 role-hierarchy links (engineer builds, analyst reads, admin orchestrates) |
@@ -50,7 +50,7 @@ GRANT APPLY ROW ACCESS POLICY ON ACCOUNT TO ROLE FR_DEMO_ADMIN;
     as `FR_DATA_ENGINEER` on `WH_INGESTION_MEDIUM` (600 / 928 / 50 000 000 rows — PG-06
     generator: `session-1/sql/04_generator_50m_transacciones.sql` + `dbt build --full-refresh`).
 2. **dbt** — `dbt/profiles.yml` pins `role: FR_DATA_ENGINEER`,
-   `database: SUPERINTENDENCY_DEMO_DB`, `warehouse: WH_INGESTION_XSMALL`:
+   `database: SUPERINTENDENCY_DEMO_DB`, `warehouse: WH_INGESTION_MEDIUM`:
 
    ```bash
    cd Demo/SB_Demo/dbt
@@ -68,14 +68,14 @@ GRANT APPLY ROW ACCESS POLICY ON ACCOUNT TO ROLE FR_DEMO_ADMIN;
 ## 2. Session 2 — Snowpark, Cortex & Streamlit (`scripts/session-2-analytics-ai/`)
 
 1. **Snowpark ML** — `python/01_train_fraud_model.py` as `FR_DATA_ENGINEER` on
-   `WH_APP_XSMALL` (small default; `SNOWFLAKE_WAREHOUSE` override —
-   `WH_CORTEX_LARGE` only when credits allow): feature SQL over the dbt mart,
+   `WH_APP_MEDIUM` (MEDIUM default; `SNOWFLAKE_WAREHOUSE` override —
+   `WH_TRANSFORM_LARGE` only when credits allow): feature SQL over the dbt mart,
    RandomForest training, evaluation and registration of
    `RISK_ANALYTICS_SCHEMA.DETECTOR_FRAUDES` (V1), callable from SQL.
 2. **Cortex AI (español)** — `sql/02_cortex_ai_features.sql`, five blocks
    (`AI_SUMMARIZE`, `AI_TRANSLATE`, `AI_COMPLETE` ×2, vector-store
    RAG with `AI_EMBED` + `AI_EXTRACT` question-answering) as
-   `FR_DATA_ENGINEER` on `WH_CORTEX_LARGE`; verified end-to-end on the
+   `FR_DATA_ENGINEER` on `WH_TRANSFORM_LARGE`; verified end-to-end on the
     Trial Account (Credit Card Attached) (legacy `SNOWFLAKE.CORTEX.*` returns `399270` on new
    accounts — the script uses the modern `AI_*` namespace).
 3. **MCP server — required for the evaluators** — initialize before the demo:
@@ -95,7 +95,7 @@ GRANT APPLY ROW ACCESS POLICY ON ACCOUNT TO ROLE FR_DEMO_ADMIN;
    RETAIL-only rows, `002003` on the raw layer. Full setup and presenter demo
    script: `scripts/session-2-analytics-ai/README.md` (Step 4).
 4. **Streamlit** — **deployed 2026-10-15**: `sql/04_deploy_streamlit.sql`
-   (`PUT` + `CREATE STREAMLIT` as `FR_DATA_ENGINEER`, `WH_APP_XSMALL`) runs
+   (`PUT` + `CREATE STREAMLIT` as `FR_DATA_ENGINEER`, `WH_APP_MEDIUM`) runs
    from the repo root with snowsql **only after explicit human approval**
    (never automated; redeploys are equally gated).
 5. **Native App** — target database `CORTEX_NATIVE_APP_DB` (separate database
@@ -149,7 +149,7 @@ hooks for the external orchestrator (Informatica IDMC):
    `API_CURRENCY_INTEGRATION` + engineer `USAGE` grant — `main.tf`/
    `security.tf`), then run
    `sql/01_api_ingestion_procedure.sql` (bronze table + `SP_INGEST_EXTERNAL_API`,
-   `FR_DATA_ENGINEER` on `WH_INGESTION_XSMALL`). IDMC triggers:
+   `FR_DATA_ENGINEER` on `WH_INGESTION_MEDIUM`). IDMC triggers:
 
    ```sql
    CALL SUPERINTENDENCY_DEMO_DB.STAGING_SCHEMA.SP_INGEST_EXTERNAL_API();

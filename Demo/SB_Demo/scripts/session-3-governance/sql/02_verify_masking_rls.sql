@@ -1,7 +1,7 @@
 -- =============================================================================
 -- Session 3 — 02: Verify masking + row-level security (admin vs analyst)
 -- =============================================================================
--- Start as FR_DEMO_ADMIN on WH_APP_XSMALL. The script switches roles mid-way,
+-- Start as FR_DEMO_ADMIN on WH_APP_MEDIUM. The script switches roles mid-way,
 -- so run the whole file in one worksheet / one session.
 --
 -- Persona isolation: every statement below runs after USE SECONDARY ROLES NONE
@@ -49,7 +49,7 @@ ORDER BY ROLE_NAME, BUSINESS_UNIT;
 -- -----------------------------------------------------------------------------
 USE ROLE FR_BI_ANALYST;
 USE SECONDARY ROLES NONE;  -- isolate: only FR_BI_ANALYST is effective
-USE WAREHOUSE WH_APP_XSMALL;
+USE WAREHOUSE WH_APP_MEDIUM;
 USE DATABASE SUPERINTENDENCY_DEMO_DB;
 USE SCHEMA CORE_BANKING_SCHEMA;
 

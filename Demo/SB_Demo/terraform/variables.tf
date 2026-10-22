@@ -52,17 +52,17 @@ variable "schema_vector_store" {
 # ---------------------------------------------------------------------------
 variable "wh_ingestion" {
   type        = string
-  description = "Compute dedicated to Snowpipe and dbt runs."
+  description = "Ingestion loads (COPY/PUT) and staging work."
 }
 
 variable "wh_cortex" {
   type        = string
-  description = "Compute allocated for ML and Cortex LLM queries."
+  description = "Heavy ETL/dbt transforms and ML/Cortex queries."
 }
 
 variable "wh_app" {
   type        = string
-  description = "Compute for the Streamlit / Native App UI."
+  description = "Streamlit / Native App / MCP UI compute."
 }
 
 # ---------------------------------------------------------------------------
