@@ -37,3 +37,13 @@ rls_mapping_table          = "ROLE_MAPPING"
 
 # Policy attachment happens AFTER the session data scripts create the tables.
 attach_policies_to_tables = true
+
+# External integrations (integrations.tf). Passwords come ONLY from
+# TF_VAR_idmc_cdi_password / TF_VAR_idmc_cdgc_password / TF_VAR_bi_analyst_password.
+schema_idmc_landing      = "IDMC_LANDING_SCHEMA"
+role_idmc_integration    = "FR_IDMC_INTEGRATION"
+role_catalog_reader      = "FR_CATALOG_READER"
+create_integration_users = true
+user_idmc_cdi            = "SVC_IDMC_CDI"
+user_idmc_cdgc           = "SVC_IDMC_CDGC"
+user_bi_analyst          = "DEMO_ANALYST"

@@ -123,3 +123,80 @@ variable "attach_policies_to_tables" {
   EOT
   default     = false
 }
+
+# ---------------------------------------------------------------------------
+# External integrations (integrations.tf) — IDMC CDI, IDMC CDGC, Power BI
+# ---------------------------------------------------------------------------
+variable "schema_idmc_landing" {
+  type        = string
+  description = "Landing schema for IDMC CDI loads."
+  default     = "IDMC_LANDING_SCHEMA"
+}
+
+variable "role_idmc_integration" {
+  type        = string
+  description = "Service role for the IDMC CDI connection."
+  default     = "FR_IDMC_INTEGRATION"
+}
+
+variable "role_catalog_reader" {
+  type        = string
+  description = "Service role for the IDMC CDGC catalog source."
+  default     = "FR_CATALOG_READER"
+}
+
+variable "create_integration_users" {
+  type        = bool
+  description = "Create the IDMC and Power BI users. Requires CREATE USER on FR_TERRAFORM (bootstrap) and the passwords below."
+  default     = true
+}
+
+variable "user_idmc_cdi" {
+  type    = string
+  default = "SVC_IDMC_CDI"
+}
+
+variable "user_idmc_cdgc" {
+  type    = string
+  default = "SVC_IDMC_CDGC"
+}
+
+variable "user_bi_analyst" {
+  type    = string
+  default = "DEMO_ANALYST"
+}
+
+# Secrets: set via TF_VAR_<name> environment variables, never in tfvars.
+variable "idmc_cdi_password" {
+  type      = string
+  sensitive = true
+  default   = null
+}
+
+variable "idmc_cdgc_password" {
+  type      = string
+  sensitive = true
+  default   = null
+}
+
+variable "bi_analyst_password" {
+  type      = string
+  sensitive = true
+  default   = null
+}
+
+# Optional key-pair auth (public key body, no BEGIN/END lines).
+variable "idmc_cdi_rsa_public_key" {
+  type    = string
+  default = null
+}
+
+variable "idmc_cdgc_rsa_public_key" {
+  type    = string
+  default = null
+}
+
+variable "bi_analyst_rsa_public_key" {
+  type    = string
+  default = null
+}
