@@ -37,7 +37,7 @@ snowsql -f Demo/SB_Demo/scripts/session-4-integrations-apis/sql/01_api_ingestion
 ```
 
 The script is idempotent (`CREATE TABLE IF NOT EXISTS` + `CREATE OR REPLACE
-PROCEDURE`) and runs as `FR_DATA_ENGINEER` on `WH_INGESTION_XSMALL`, with
+PROCEDURE`) and runs as `FR_DATA_ENGINEER` on `WH_INGESTION_MEDIUM`, with
 secondary roles disabled.
 
 ## Hook for Informatica IDMC (integration contract)
@@ -46,7 +46,7 @@ secondary roles disabled.
 |---|---|
 | Statement | `CALL SUPERINTENDENCY_DEMO_DB.STAGING_SCHEMA.SP_INGEST_EXTERNAL_API();` |
 | Role | `FR_DATA_ENGINEER` |
-| Warehouse | `WH_INGESTION_XSMALL` |
+| Warehouse | `WH_INGESTION_MEDIUM` |
 | Success | returns `Ingesta OK: <n> bytes de api.frankfurter.app` |
 | Failure | raises a SQL exception — network/HTTP errors propagate **on purpose** (no try/except), so the mapping fails visibly instead of reporting a false success |
 | Output | one new row per CALL in `SUPERINTENDENCY_DEMO_DB.STAGING_SCHEMA.API_RAW_CURRENCY_DATA` (`RAW_PAYLOAD` VARIANT, `INGESTION_TIME` LTZ) |
@@ -88,7 +88,7 @@ Body (JSON payload):
   "timeout": 60,
   "database": "SUPERINTENDENCY_DEMO_DB",
   "schema": "CORE_BANKING_SCHEMA",
-  "warehouse": "WH_INGESTION_XSMALL",
+  "warehouse": "WH_INGESTION_MEDIUM",
   "role": "FR_BI_ANALYST"
 }
 ```

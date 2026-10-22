@@ -27,10 +27,10 @@ each repository's *actual* hardcoded names into the approved banking targets.
 
 | File | Hardcoded Object | Banking Target |
 |------|------------------|----------------|
-| `setup.sql:4` | `WAREHOUSE DASH_S` | `WH_INGESTION_XSMALL` |
+| `setup.sql:4` | `WAREHOUSE DASH_S` | `WH_INGESTION_MEDIUM` |
 | `setup.sql:5` | `DATABASE DASH_DB` | `SUPERINTENDENCY_DEMO_DB` |
 | `setup.sql:6` | `SCHEMA DASH_SCHEMA` | `CORE_BANKING_SCHEMA` |
-| `automate_data_pipeline_ml.py:150,160` | `WAREHOUSE = 'DASH_L'` | `WH_INGESTION_XSMALL` |
+| `automate_data_pipeline_ml.py:150,160` | `WAREHOUSE = 'DASH_L'` | `WH_INGESTION_MEDIUM` |
 | Streamlit `*.py` | `DASH_DB` refs | `SUPERINTENDENCY_DEMO_DB` |
 
 ### 2. dbt-on-snowflake (Session 1)
@@ -39,7 +39,7 @@ each repository's *actual* hardcoded names into the approved banking targets.
 |------|------------------|----------------|
 | `profiles.yml` (dev/prod) | `database: tasty_bytes_dbt_db` | `SUPERINTENDENCY_DEMO_DB` |
 | `profiles.yml` (dev/prod) | `schema: dev` / `prod` | `STAGING_SCHEMA` / `RISK_ANALYTICS_SCHEMA` |
-| `profiles.yml` (dev/prod) | `warehouse: tasty_bytes_dbt_wh` | `WH_INGESTION_XSMALL` |
+| `profiles.yml` (dev/prod) | `warehouse: tasty_bytes_dbt_wh` | `WH_INGESTION_MEDIUM` |
 | `profiles.yml` (dev/prod) | `role: accountadmin` | `FR_DATA_ENGINEER` — **guardrail fix: agent must not run dbt as ACCOUNTADMIN** |
 | `setup/tasty_bytes_setup.sql:43-49` | `tasty_bytes_dbt_db` + `dev/prod/raw/integrations` schemas | `SUPERINTENDENCY_DEMO_DB` + `STAGING_SCHEMA`/`RISK_ANALYTICS_SCHEMA`/`CORE_BANKING_SCHEMA` |
 | `models/marts/orders.sql` | `ORDERS` fact | `CREDIT_CARD_TRANSACTIONS` |
@@ -51,8 +51,8 @@ each repository's *actual* hardcoded names into the approved banking targets.
 |------|------------------|----------------|
 | `scripts/lab_setup.sql:3` | `ROLE nactx_role` | `FR_DATA_ENGINEER` |
 | `scripts/lab_setup.sql:19` | `ROLE nac` | `FR_BI_ANALYST` (app consumer sees masked data) |
-| `scripts/lab_setup.sql:15` | `WAREHOUSE wh_nap` (app processing) | `WH_CORTEX_LARGE` |
-| `scripts/lab_setup.sql:28` | `WAREHOUSE wh_nac` (app UI) | `WH_APP_XSMALL` *(approved)* |
+| `scripts/lab_setup.sql:15` | `WAREHOUSE wh_nap` (app processing) | `WH_TRANSFORM_LARGE` |
+| `scripts/lab_setup.sql:28` | `WAREHOUSE wh_nac` (app UI) | `WH_APP_MEDIUM` *(approved)* |
 | `scripts/lab_setup.sql:12-13` | `DATABASE cortex_app` / `SCHEMA cortex_app.napp` | Native App package → **`CORTEX_NATIVE_APP_DB`** *(approved — separate database, `terraform/main.tf`)* |
 | `scripts/lab_setup.sql:29-30` | `DATABASE movies` / `SCHEMA movies.data` | `SUPERINTENDENCY_DEMO_DB.CORE_BANKING_SCHEMA` (raw docs) |
 | `app/setup_script.sql` | `movies_metadata_chunked` | → `RISK_ANALYTICS_SCHEMA` (doc chunks for embeddings) |
@@ -63,7 +63,7 @@ each repository's *actual* hardcoded names into the approved banking targets.
 |------|------------------|----------------|
 | `0-lab-Setup.sql:54` | `DATABASE HRZN_DB` | `SUPERINTENDENCY_DEMO_DB` |
 | `0-lab-Setup.sql:55` | `SCHEMA HRZN_DB.HRZN_SCH` | `CORE_BANKING_SCHEMA` |
-| `0-lab-Setup.sql:43` | `WAREHOUSE HRZN_WH` | `WH_CORTEX_LARGE` |
+| `0-lab-Setup.sql:43` | `WAREHOUSE HRZN_WH` | `WH_TRANSFORM_LARGE` |
 | `0-lab-Setup.sql:24` | `ROLE HRZN_DATA_ENGINEER` | `FR_DATA_ENGINEER` |
 | `0-lab-Setup.sql:26` | `ROLE HRZN_DATA_USER` | `FR_BI_ANALYST` (masked test role) |
 | `0-lab-Setup.sql:25` | `ROLE HRZN_DATA_GOVERNOR` | `FR_DEMO_ADMIN` *(approved)* |

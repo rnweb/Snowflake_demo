@@ -18,7 +18,7 @@ superintendency_demo:
       role: FR_DATA_ENGINEER
       database: SUPERINTENDENCY_DEMO_DB
       schema: STAGING_SCHEMA
-      warehouse: WH_INGESTION_XSMALL
+      warehouse: WH_INGESTION_MEDIUM
       threads: 8
 
     # Azure DevOps CI/CD targets (C05). Password auth from pipeline secret

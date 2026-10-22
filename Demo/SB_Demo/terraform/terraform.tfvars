@@ -17,9 +17,9 @@ schema_governance   = "GOVERNANCE_SCHEMA"
 schema_vector_store = "CORTEX_VECTOR_STORE"
 
 # Warehouses
-wh_ingestion = "WH_INGESTION_XSMALL"
-wh_cortex    = "WH_CORTEX_LARGE"
-wh_app       = "WH_APP_XSMALL"
+wh_ingestion = "WH_INGESTION_MEDIUM"
+wh_cortex    = "WH_TRANSFORM_LARGE"
+wh_app       = "WH_APP_MEDIUM"
 
 # Roles
 role_admin    = "FR_DEMO_ADMIN"

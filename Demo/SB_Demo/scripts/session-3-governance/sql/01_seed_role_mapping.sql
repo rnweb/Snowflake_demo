@@ -1,7 +1,7 @@
 -- =============================================================================
 -- Session 3 — 01: Seed ROLE_MAPPING + bind the row access policy
 -- =============================================================================
--- Rol: FR_DEMO_ADMIN | Almacén: WH_APP_XSMALL
+-- Rol: FR_DEMO_ADMIN | Almacén: WH_APP_MEDIUM
 --
 -- Purpose: mapping-table rows and the ALTER TABLE ... ADD ROW ACCESS POLICY
 -- binding live in SQL (data stays out of Terraform); the policy object itself

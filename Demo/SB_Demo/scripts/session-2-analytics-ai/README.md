@@ -44,7 +44,7 @@ This session shows how the platform moves from *governed data* to
     (model registration) — `security.tf`
   - `USAGE` + `CREATE TABLE` / `CREATE VIEW` / `MODIFY` on
     `CORTEX_VECTOR_STORE` (vector store) — `security.tf`
-  - `USAGE` on `WH_APP_XSMALL`, `USAGE`+`CREATE STREAMLIT` and stage
+  - `USAGE` on `WH_APP_MEDIUM`, `USAGE`+`CREATE STREAMLIT` and stage
     `READ`/`WRITE` on `CORTEX_NATIVE_APP_DB.PUBLIC` (app deployment)
 - Python **3.12** virtualenv at the repository root (snowflake-ml-python has
   no Python 3.14 wheels):
@@ -60,7 +60,7 @@ This session shows how the platform moves from *governed data* to
     `SNOWFLAKE_PRIVATE_KEY_PATH` (or `SNOWFLAKE_PRIVATE_KEY` = PEM contents)
   - optional: `SNOWFLAKE_AUTHENTICATOR` (default `SNOWFLAKE_JWT`),
     `SNOWFLAKE_ROLE` (train: `FR_DATA_ENGINEER`, MCP: `FR_BI_ANALYST`),
-    `SNOWFLAKE_WAREHOUSE` (default `WH_APP_XSMALL`),
+    `SNOWFLAKE_WAREHOUSE` (default `WH_APP_MEDIUM`),
     `SNOWFLAKE_DISABLE_OCSP` (default `true` — OCSP responder unreachable
     from this network; set `false` to enforce OCSP validation)
 - Session 1 executed (the mart `CREDIT_CARD_TRANSACTIONS` must exist)
@@ -73,16 +73,21 @@ From the repository root:
 .venv\Scripts\python -u Demo/SB_Demo/scripts/session-2-analytics-ai/python/01_train_fraud_model.py
 ```
 
-Expected output (role `FR_DATA_ENGINEER`, warehouse `WH_APP_XSMALL` — the
-small default keeps costs bounded; override with `SNOWFLAKE_WAREHOUSE`,
-e.g. `WH_CORTEX_LARGE` for parallel training benches):
+Expected output (role `FR_DATA_ENGINEER`, warehouse `WH_APP_MEDIUM` — the
+MEDIUM default keeps costs bounded; override with `SNOWFLAKE_WAREHOUSE`,
+e.g. `WH_TRANSFORM_LARGE` for parallel training benches):
 
 ```
-[1/5] connected as FR_DATA_ENGINEER on WH_APP_XSMALL
+[1/5] connected as FR_DATA_ENGINEER on WH_APP_MEDIUM
 [2/5] mart loaded: 18000 rows, 1675 proxy-fraud labels
 [3/5] RandomForest trained (80/20 split, seed=42)
 [4/5] evaluation: EVALUADOS=3651 ACCURACY=0.9310 RECALL=0.4404 PRECISION=0.7608
 [5/5] registered SUPERINTENDENCY_DEMO_DB.RISK_ANALYTICS_SCHEMA.DETECTOR_FRAUDES (V1)
+```
+
+> Transcript of the original 18 000-row training run (labels/eval as shown).
+> The mart holds **50 000 000** rows since PG-06 (2026-10-21) — retrain
+> `python/01_train_fraud_model.py` to refresh the evaluation set.
 
 --- SQL inference example (model is callable from SQL) ---
 SELECT MODEL(SUPERINTENDENCY_DEMO_DB.RISK_ANALYTICS_SCHEMA.DETECTOR_FRAUDES, V1)!predict(
@@ -126,7 +131,7 @@ Spanish):
    `AI_COMPLETE` + `AI_EXTRACT` (mode `question answering`)
 
 Run them from a Snowsight worksheet (or any SQL client) as
-**`FR_DATA_ENGINEER`** on **`WH_APP_XSMALL`** (or `WH_CORTEX_LARGE` when the
+**`FR_DATA_ENGINEER`** on **`WH_APP_MEDIUM`** (or `WH_TRANSFORM_LARGE` when the
 account has credits to spare — never the default).
 
 > **Trial Account (Credit Card Attached) (verificado):** los cinco bloques se ejecutaron de
@@ -159,7 +164,7 @@ account has credits to spare — never the default).
 > is a client command — it does not run in a Snowsight worksheet) as
 > **`FR_DATA_ENGINEER`**. **Deployed 2026-10-15**: `SHOW STREAMLITS IN
 > DATABASE CORTEX_NATIVE_APP_DB` returns `PANEL_PREVENCION_FRAUDE`
-> (`owner: FR_DATA_ENGINEER`, `query_warehouse: WH_APP_XSMALL`). Redeploying
+> (`owner: FR_DATA_ENGINEER`, `query_warehouse: WH_APP_MEDIUM`). Redeploying
 > (`CREATE OR REPLACE`) still requires fresh human approval.
 
 The app connects through `st.connection("snowflake")` and switches the session
@@ -194,12 +199,12 @@ set SNOWFLAKE_USER=OPERATIONS
 set SNOWFLAKE_AUTHENTICATOR=SNOWFLAKE_JWT
 set SNOWFLAKE_PRIVATE_KEY_PATH=%USERPROFILE%\rsa_key.p8
 set SNOWFLAKE_ROLE=FR_BI_ANALYST
-set SNOWFLAKE_WAREHOUSE=WH_APP_XSMALL
+set SNOWFLAKE_WAREHOUSE=WH_APP_MEDIUM
 .venv\Scripts\python -u Demo/SB_Demo/scripts/session-2-analytics-ai/python/mcp_server.py
 ```
 
 `SNOWFLAKE_ROLE` defaults to `FR_BI_ANALYST` and `SNOWFLAKE_WAREHOUSE` to
-`WH_APP_XSMALL`; the MCP server always reads from
+`WH_APP_MEDIUM`; the MCP server always reads from
 `CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS`.
 
 ### Connect Claude Desktop
@@ -220,7 +225,7 @@ Add to the `mcpServers` block of Claude Desktop's config
         "SNOWFLAKE_AUTHENTICATOR": "SNOWFLAKE_JWT",
         "SNOWFLAKE_PRIVATE_KEY_PATH": "C:\\Users\\<you>\\rsa_key.p8",
         "SNOWFLAKE_ROLE": "FR_BI_ANALYST",
-        "SNOWFLAKE_WAREHOUSE": "WH_APP_XSMALL"
+        "SNOWFLAKE_WAREHOUSE": "WH_APP_MEDIUM"
       }
     }
   }

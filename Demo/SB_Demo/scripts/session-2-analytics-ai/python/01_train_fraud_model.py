@@ -8,8 +8,8 @@ evaluates it and registers it in the Snowflake Model Registry
     SELECT MODEL(<db>.<schema>.DETECTOR_FRAUDES, V1)!predict(<features>) FROM ...;
 
 Role: FR_DATA_ENGINEER (override: SNOWFLAKE_ROLE)
-Warehouse: WH_APP_XSMALL (override: SNOWFLAKE_WAREHOUSE) — training only moves
-the mart over the wire and fits client-side; the expensive WH_CORTEX_LARGE is
+Warehouse: WH_APP_MEDIUM (override: SNOWFLAKE_WAREHOUSE) — training only moves
+the mart over the wire and fits client-side; the expensive WH_TRANSFORM_LARGE is
 reserved for workloads that actually need it (trial-credit guardrail).
 
 Note on labels: the synthetic dataset has no real fraud outcomes, so the
@@ -156,7 +156,7 @@ def build_session() -> Session:
             "authenticator": os.getenv("SNOWFLAKE_AUTHENTICATOR", "SNOWFLAKE_JWT"),
             "private_key": private_key,
             "role": os.getenv("SNOWFLAKE_ROLE", "FR_DATA_ENGINEER"),
-            "warehouse": os.getenv("SNOWFLAKE_WAREHOUSE", "WH_APP_XSMALL"),
+            "warehouse": os.getenv("SNOWFLAKE_WAREHOUSE", "WH_APP_MEDIUM"),
             "database": DB,
             "schema": REGISTRY_SCHEMA,
             "login_timeout": 30,

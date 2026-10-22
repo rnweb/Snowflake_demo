@@ -1,7 +1,7 @@
 -- =============================================================================
 -- Session 3 — 02: Verify masking + row-level security (admin vs analyst)
 -- =============================================================================
--- Start as FR_DEMO_ADMIN on WH_APP_XSMALL. The script switches roles mid-way,
+-- Start as FR_DEMO_ADMIN on WH_APP_MEDIUM. The script switches roles mid-way,
 -- so run the whole file in one worksheet / one session.
 --
 -- Persona isolation: every statement below runs after USE SECONDARY ROLES NONE
@@ -11,10 +11,10 @@
 -- FR_DATA_ENGINEER's raw-layer privileges (STAGING_SCHEMA).
 --
 -- Expected results:
---   FR_DEMO_ADMIN  -> RUT y NUMERO_TARJETA en claro, 3 unidades, 18 000 filas
+--   FR_DEMO_ADMIN  -> RUT y NUMERO_TARJETA en claro, 3 unidades, 50 000 000 filas
 --   FR_BI_ANALYST  -> RUT como pseudónimo determinista ***-**-<12 hex>
 --                     (mismo token que la dim → joins/filtros siguen casando),
---                     tarjeta '****-****-****-****', solo RETAIL (5 849 filas),
+--                     tarjeta '****-****-****-****', solo RETAIL (15 969 793 filas),
 --                     misma SQL sin cambios de app
 -- Note: the RUT mask is deterministic, so WHERE RUT = '<token>' still matches
 -- for non-admin roles (predicates run on the post-policy value).
@@ -49,7 +49,7 @@ ORDER BY ROLE_NAME, BUSINESS_UNIT;
 -- -----------------------------------------------------------------------------
 USE ROLE FR_BI_ANALYST;
 USE SECONDARY ROLES NONE;  -- isolate: only FR_BI_ANALYST is effective
-USE WAREHOUSE WH_APP_XSMALL;
+USE WAREHOUSE WH_APP_MEDIUM;
 USE DATABASE SUPERINTENDENCY_DEMO_DB;
 USE SCHEMA CORE_BANKING_SCHEMA;
 
