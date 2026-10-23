@@ -92,6 +92,16 @@ dbt source freshness --profiles-dir .  # 3/3 sources fresh
 Expected result: **`PASS=41 WARN=0 ERROR=0`** — 41 passes = 5 models
 (3 views + 2 marts) + 36 tests — and **`3/3 sources fresh`**.
 
+> **Governance caveat:** every `dbt build` recreates `CLIENT_PROFILE_DIM`
+> (`CREATE OR REPLACE TABLE`), and Snowflake silently detaches the RUT masking
+> policy when a table is replaced (the FK relationship test then fails with
+> masked-vs-plaintext values). Re-attach afterwards:
+> `terraform apply -target=snowflake_table_column_masking_policy_application.national_id`
+> (drift is detected on refresh). Re-run `dbt test` for the relationship test
+> after re-attaching. The incremental fact table is untouched by plain builds —
+> only `--full-refresh` replaces it and also requires re-attaching
+> `national_id_fact` + `credit_card` plus the RLS rebind (see session 3).
+
 ## Step 3 — Apache Iceberg lakehouse proof (open format, Snowflake-managed)
 
 ```bash
@@ -104,18 +114,21 @@ self-contained and re-runnable (`IF NOT EXISTS`, `TRUNCATE`, `OVERWRITE`):
 
 1. Creates the internal stage `STAGING_SCHEMA.ICEBERG_DEMO_STAGE`
 2. Exports all mart rows to the stage as **Parquet**
-   (18 000 rows / `data_0_0_0.snappy.parquet`, ~518 KB at the original run —
-   the mart holds 50 000 000 since PG-06)
+   (50 000 000 rows since PG-06 — 6 files, ~1.15 GB; the export runs with
+   masking active, so RUT/tarjeta land as tokens)
 3. Creates `CORE_BANKING_SCHEMA.HISTORICO_TRANSACCIONES_ICEBERG` with
    `CREATE ICEBERG TABLE ... CATALOG = 'SNOWFLAKE'`
 4. Loads the full history into it
+
+> Run with a current database (`USE DATABASE SUPERINTENDENCY_DEMO_DB;` first —
+> the stage statements are not fully qualified).
 
 Verification (expected results):
 
 | Check | Expected |
 |-------|----------|
 | `SHOW TABLES LIKE 'HISTORICO%'` | `is_iceberg = 'Y'` (Snowsight shows the Iceberg badge) |
-| Row parity query | `FUENTE = 18000`, `ICEBERG = 18000` (original seed — `FUENTE` is 50 000 000 since PG-06) |
+| Row parity query | `FUENTE = 50000000`, `ICEBERG = 50000000` (re-run 2026-10-22; original seed was 18 000 on both sides) |
 | `LIST @...ICEBERG_DEMO_STAGE/historico_transacciones/` | `data_0_0_0.snappy.parquet` |
 
 Presenter talking points:

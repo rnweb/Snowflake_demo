@@ -15,9 +15,9 @@ cima para baixo, pulando o que já está ✅ na coluna da conta nova.
 | 1b | `terraform/integrations.tf` (IDMC_LANDING_SCHEMA, FR_IDMC_INTEGRATION, FR_CATALOG_READER, usuários SVC_IDMC_CDI/SVC_IDMC_CDGC e DEMO_ANALYST + grants) | Terraform | ✅ | ⏳ | **Pré-requisito de toda a parte IDMC/CDGC e do Power BI** na conta nova. Senhas só via `TF_VAR_*`. Rodar antes o bloco final do `00_accountadmin_bootstrap.sql` (CREATE USER para FR_TERRAFORM) |
 | 2 | `scripts/bootstrap/00_accountadmin_bootstrap.sql` | ACCOUNTADMIN | ✅ | ✅ | |
 | 3 | `scripts/session-1-lakehouse/sql/01_create_raw_tables.sql` | FR_DATA_ENGINEER | ✅ | ✅ | |
-| 3b | `scripts/session-1-lakehouse/sql/03_iceberg_lakehouse_demo.sql` | FR_DATA_ENGINEER | ✅ | ⏳ | Falta `HISTORICO_TRANSACCIONES_ICEBERG` + `ICEBERG_DEMO_STAGE` |
+| 3b | `scripts/session-1-lakehouse/sql/03_iceberg_lakehouse_demo.sql` | FR_DATA_ENGINEER | ✅ | ✅ | `HISTORICO_TRANSACCIONES_ICEBERG` + `ICEBERG_DEMO_STAGE` criados em 22/10 na nova conta: paridade 50.000.000 = 50.000.000 (export com máscara ativa → tokens) |
 | 4 | `scripts/session-1-lakehouse/python/generate_and_load.py` + `sql/02_load_raw_data.sql` | FR_DATA_ENGINEER | ✅ | ✅ | 600 clientes, 928 cartões nas duas; transações 18.000 (antiga) / 50.000.000 (nova, PG-06) |
-| 5 | `dbt build` (staging + core) | FR_DATA_ENGINEER | ✅ | ✅ | Marts 600 / 50.000.000 na nova (600 / 18.000 na antiga). Nunca `CREATE OR REPLACE` depois do passo 6 |
+| 5 | `dbt build` (staging + core) | FR_DATA_ENGINEER | ✅ | ✅ | Marts 600 / 50.000.000 na nova (600 / 18.000 na antiga). Nunca `CREATE OR REPLACE` depois do passo 6. **Cada `dbt build` recria `CLIENT_PROFILE_DIM` e destaca a máscara da coluna RUT** → reaplicar `terraform apply -target=snowflake_table_column_masking_policy_application.national_id` após qualquer build (o `--full-refresh` destaca também `national_id_fact`/`credit_card` + RLS) |
 | 6 | `scripts/session-3-governance/sql/01_seed_role_mapping.sql` | FR_DEMO_ADMIN | ✅ (11 linhas) | ⚠️ (4 linhas) | Reexecutar **depois do 1b** (precisa das roles IDMC/catálogo) |
 | 7 | `scripts/session-3-governance/sql/02_verify_masking_rls.sql` | — | ✅ | ⏳ | Máscaras e RLS já aplicadas nos marts da conta nova; só validar |
 | 8 | `scripts/session-3-governance/sql/03_object_tagging_demo.sql` | FR_DEMO_ADMIN | ✅ | ⏳ | Tag `DATA_CLASSIFICATION` não existe na nova |

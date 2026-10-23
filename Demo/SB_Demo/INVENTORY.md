@@ -93,20 +93,22 @@ FR_TERRAFORM                 # separate IaC-only role (no demo-hierarchy grants)
 | `…STAGING_SCHEMA.STG_CLIENTES` | view | — | dbt (`staging/stg_clientes.sql`) |
 | `…STAGING_SCHEMA.STG_TARJETAS_CREDITO` | view | — | dbt (`staging/stg_tarjetas_credito.sql`) |
 | `…STAGING_SCHEMA.STG_TRANSACCIONES` | view | — | dbt (`staging/stg_transacciones.sql`) |
-| `…CORE_BANKING_SCHEMA.HISTORICO_TRANSACCIONES_ICEBERG` | **Iceberg table** | 18 000 | Session 1 `03_iceberg_lakehouse_demo.sql` (seed snapshot — raw/gold since scaled to 50 000 000, PG-06) |
+| `…CORE_BANKING_SCHEMA.HISTORICO_TRANSACCIONES_ICEBERG` | **Iceberg table** | 50 000 000 | Session 1 `03_iceberg_lakehouse_demo.sql` (re-run 2026-10-22 against the PG-06 mart; export runs with masking active, so RUT/tarjeta are stored as tokens) |
 | `…STAGING_SCHEMA.API_RAW_CURRENCY_DATA` | table | grows +1 per CALL | Session 4 `01_api_ingestion_procedure.sql` — raw FX-API payload (VARIANT) via External Access |
 
 - Iceberg table: **open-format, Snowflake-managed** (`CATALOG='SNOWFLAKE'` —
   Iceberg spec files on Snowflake storage, loaded from Parquet on
-  `ICEBERG_DEMO_STAGE`, 3 files, 518 744 bytes); row parity with the raw mart
-  verified at seed time (`is_iceberg='Y'`) — since PG-06 (2026-10-21) the raw
-  mart holds 50 000 000 rows while this seed snapshot stays at 18 000. Reading it from *external* engines would need an
+  `ICEBERG_DEMO_STAGE`, 6 files, 1 146 516 878 bytes); row parity with the
+  mart verified at **50 000 000 = 50 000 000** (re-run 2026-10-22 after
+  PG-06, `is_iceberg='Y'`). Reading it from *external* engines would need an
   **External Volume** (cloud-storage credentials) — a documented future
   extension, not provisioned in this demo.
 - No masking or RLS policies are attached to this layer — and since the
   2026-10-07 hardening `FR_BI_ANALYST` has **no access here at all**
   ([scope notes](#scope-notes)); raw tables are reachable by
-  `FR_DEMO_ADMIN`/`FR_DATA_ENGINEER` only.
+  `FR_DEMO_ADMIN`/`FR_DATA_ENGINEER` only. The 2026-10-22 export ran with
+  governance active, so the stored RUT/tarjeta values are already the
+  pseudonym/mask tokens (no plaintext PII in the Iceberg files).
 
 ---
 
