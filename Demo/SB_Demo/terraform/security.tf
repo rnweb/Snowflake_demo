@@ -170,6 +170,16 @@ resource "snowflake_grant_privileges_to_account_role" "admin_governance_dml_futu
   }
 }
 
+# Session 3 — 04_audit_logs.sql (PRE-05) creates GOVERNANCE_SCHEMA.AUDIT_QUERY_LOG
+# as the admin; the schema is TF-owned, so CREATE TABLE belongs here (IaC boundary).
+resource "snowflake_grant_privileges_to_account_role" "admin_governance_create_table" {
+  account_role_name = snowflake_account_role.admin.name
+  privileges        = ["CREATE TABLE"]
+  on_schema {
+    schema_name = snowflake_schema.governance.fully_qualified_name
+  }
+}
+
 # NOTE — APPLY MASKING POLICY and APPLY ROW ACCESS POLICY exist only as
 # account-level (global) privileges (granting them ON SCHEMA fails 003008),
 # and FR_TERRAFORM cannot grant account-level privileges (003102) — Snowflake

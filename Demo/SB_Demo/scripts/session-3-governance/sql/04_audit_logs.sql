@@ -19,7 +19,7 @@ USE WAREHOUSE WH_APP_MEDIUM;
 -- 0. Generate activity as DEMO_ANALYST (run in a separate session/worksheet)
 -- -----------------------------------------------------------------------------
 -- USE ROLE FR_BI_ANALYST;
--- SELECT COUNT(*) FROM SUPERINTENDENCY_DEMO_DB.CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS;  -- allowed (5849)
+-- SELECT COUNT(*) FROM SUPERINTENDENCY_DEMO_DB.CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS;  -- allowed (15969793)
 -- SELECT COUNT(*) FROM SUPERINTENDENCY_DEMO_DB.STAGING_SCHEMA.<raw_table>;                   -- DENIED
 
 -- -----------------------------------------------------------------------------
