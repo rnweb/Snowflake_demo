@@ -14,6 +14,12 @@
 -- CORTEX_NATIVE_APP_DB.PUBLIC — see terraform/security.tf).
 -- Expected: SHOW STREAMLITS returns PANEL_PREVENCION_FRAUDE with
 -- query_warehouse WH_APP_MEDIUM (small warehouse — trial-credit guardrail).
+--
+-- CRITICAL — AUTO_COMPRESS=FALSE is mandatory: PUT defaults to compressing
+-- the file (.gz), and Streamlit in Snowflake CANNOT parse a gzipped main
+-- script — the app dies at startup with a generic interpreter TypeError
+-- before any app-level try/except can run (root cause of the 2026-10-22/23
+-- SiS crash; the stage held streamlit_app.py.gz). NEVER drop this option.
 -- =============================================================================
 
 USE ROLE FR_DATA_ENGINEER;
@@ -22,7 +28,8 @@ USE DATABASE CORTEX_NATIVE_APP_DB;
 USE SCHEMA PUBLIC;
 
 PUT file://Demo/SB_Demo/scripts/session-2-analytics-ai/streamlit_app.py
-  @CORTEX_NATIVE_APP_DB.PUBLIC.STREAMLIT_STAGE OVERWRITE=TRUE;
+  @CORTEX_NATIVE_APP_DB.PUBLIC.STREAMLIT_STAGE
+  AUTO_COMPRESS=FALSE OVERWRITE=TRUE;
 
 CREATE OR REPLACE STREAMLIT PANEL_PREVENCION_FRAUDE
   ROOT_LOCATION = '@CORTEX_NATIVE_APP_DB.PUBLIC.STREAMLIT_STAGE'

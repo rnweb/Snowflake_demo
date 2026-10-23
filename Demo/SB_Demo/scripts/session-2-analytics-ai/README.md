@@ -166,6 +166,12 @@ account has credits to spare — never the default).
 > DATABASE CORTEX_NATIVE_APP_DB` returns `PANEL_PREVENCION_FRAUDE`
 > (`owner: FR_DATA_ENGINEER`, `query_warehouse: WH_APP_MEDIUM`). Redeploying
 > (`CREATE OR REPLACE`) still requires fresh human approval.
+>
+> ⚠️ **`AUTO_COMPRESS=FALSE` is mandatory on the PUT** — Snowflake's PUT
+> compresses to `.gz` by default and SiS cannot parse a gzipped main script
+> (fatal interpreter TypeError at startup, before any app-level error
+> handling). The script pins `AUTO_COMPRESS=FALSE OVERWRITE=TRUE`; never
+> remove it (root cause of the 2026-10-22/23 crash).
 
 The app connects through `st.connection("snowflake")` and switches the session
 to `FR_DATA_ENGINEER` when the deployment role allows it (otherwise it keeps
