@@ -18,7 +18,7 @@ superintendency_demo:
       role: FR_DATA_ENGINEER
       database: SUPERINTENDENCY_DEMO_DB
       schema: STAGING_SCHEMA
-      warehouse: WH_INGESTION_MEDIUM
+      warehouse: WH_TRANSFORM_LARGE
       threads: 8
 
     # Azure DevOps CI/CD targets (C05). Password auth from pipeline secret
@@ -32,7 +32,7 @@ superintendency_demo:
       role: FR_DATA_ENGINEER
       database: SUPERINTENDENCY_DEMO_DB_DEV
       schema: STAGING_SCHEMA
-      warehouse: WH_INGESTION_XSMALL
+      warehouse: WH_TRANSFORM_LARGE
       threads: 4
       query_tag: "azdo-ci-dev"
     ci_prod:
@@ -43,6 +43,6 @@ superintendency_demo:
       role: FR_DATA_ENGINEER
       database: SUPERINTENDENCY_DEMO_DB
       schema: STAGING_SCHEMA
-      warehouse: WH_INGESTION_XSMALL
+      warehouse: WH_TRANSFORM_LARGE
       threads: 4
       query_tag: "azdo-cd-prod"

@@ -10,7 +10,7 @@
 -- ACCOUNT_USAGE pode atrasar até ~2 h para objetos muito recentes.
 -- =============================================================================
 USE ROLE ACCOUNTADMIN;
-USE WAREHOUSE WH_APP_XSMALL;   -- se não existir na conta, troque por COMPUTE_WH
+USE WAREHOUSE WH_APP_MEDIUM;   -- se não existir na conta, troque por COMPUTE_WH
 
 -- A tabela temporária precisa de um banco na sessão: usa um banco próprio e
 -- vazio, para não depender do que existe na conta. Apagar depois:

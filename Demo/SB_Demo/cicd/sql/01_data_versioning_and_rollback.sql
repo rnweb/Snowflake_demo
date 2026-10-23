@@ -2,7 +2,7 @@
 -- C05-AE-05 (rollback evidence) and C05-AE-06 (dataset / schema versioning)
 -- ============================================================================
 USE ROLE FR_DEMO_ADMIN;
-USE WAREHOUSE WH_APP_XSMALL;
+USE WAREHOUSE WH_APP_MEDIUM;
 
 -- ---------------------------------------------------------------------------
 -- A. Code rollback evidence: both versions stay in history

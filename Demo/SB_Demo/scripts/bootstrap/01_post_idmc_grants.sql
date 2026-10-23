@@ -26,7 +26,11 @@ ALTER TABLE SUPERINTENDENCY_DEMO_DB.IDMC_LANDING_SCHEMA.RIESGO_POR_RUBRO
     ON (UNIDAD_NEGOCIO);
 
 -- Checks
--- As FR_DEMO_ADMIN : 33 rows (11 rubros x 3 units), SUM(QTD_TRANSACCIONES) = 18000
--- As FR_BI_ANALYST : 11 rows, only RETAIL,          SUM(QTD_TRANSACCIONES) = 5849
+-- Old-account baseline (validated 2026-10-20, 18 000-row mart):
+--   As FR_DEMO_ADMIN : 33 rows (11 rubros x 3 units), SUM(QTD_TRANSACCIONES) = 18000
+--   As FR_BI_ANALYST : 11 rows, only RETAIL,          SUM(QTD_TRANSACCIONES) = 5849
+-- On the new account the mart is 50 000 000 rows (PG-06); after the IDMC
+-- mappings are re-pointed, expect SUM = 50 000 000 (admin) /
+-- 15 969 793 (analyst, RETAIL only).
 -- SELECT COUNT(*), SUM(QTD_TRANSACCIONES)
 --   FROM SUPERINTENDENCY_DEMO_DB.IDMC_LANDING_SCHEMA.RIESGO_POR_RUBRO;

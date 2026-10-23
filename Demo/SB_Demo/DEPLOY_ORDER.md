@@ -16,13 +16,13 @@ cima para baixo, pulando o que já está ✅ na coluna da conta nova.
 | 2 | `scripts/bootstrap/00_accountadmin_bootstrap.sql` | ACCOUNTADMIN | ✅ | ✅ | |
 | 3 | `scripts/session-1-lakehouse/sql/01_create_raw_tables.sql` | FR_DATA_ENGINEER | ✅ | ✅ | |
 | 3b | `scripts/session-1-lakehouse/sql/03_iceberg_lakehouse_demo.sql` | FR_DATA_ENGINEER | ✅ | ⏳ | Falta `HISTORICO_TRANSACCIONES_ICEBERG` + `ICEBERG_DEMO_STAGE` |
-| 4 | `scripts/session-1-lakehouse/python/generate_and_load.py` + `sql/02_load_raw_data.sql` | FR_DATA_ENGINEER | ✅ | ✅ | 600 clientes, 928 cartões, 18.000 transações nas duas |
-| 5 | `dbt build` (staging + core) | FR_DATA_ENGINEER | ✅ | ✅ | Marts 600 / 18.000. Nunca `CREATE OR REPLACE` depois do passo 6 |
+| 4 | `scripts/session-1-lakehouse/python/generate_and_load.py` + `sql/02_load_raw_data.sql` | FR_DATA_ENGINEER | ✅ | ✅ | 600 clientes, 928 cartões nas duas; transações 18.000 (antiga) / 50.000.000 (nova, PG-06) |
+| 5 | `dbt build` (staging + core) | FR_DATA_ENGINEER | ✅ | ✅ | Marts 600 / 50.000.000 na nova (600 / 18.000 na antiga). Nunca `CREATE OR REPLACE` depois do passo 6 |
 | 6 | `scripts/session-3-governance/sql/01_seed_role_mapping.sql` | FR_DEMO_ADMIN | ✅ (11 linhas) | ⚠️ (4 linhas) | Reexecutar **depois do 1b** (precisa das roles IDMC/catálogo) |
 | 7 | `scripts/session-3-governance/sql/02_verify_masking_rls.sql` | — | ✅ | ⏳ | Máscaras e RLS já aplicadas nos marts da conta nova; só validar |
 | 8 | `scripts/session-3-governance/sql/03_object_tagging_demo.sql` | FR_DEMO_ADMIN | ✅ | ⏳ | Tag `DATA_CLASSIFICATION` não existe na nova |
-| 9 | Mappings IDMC (mt_SB_Comercios_Maestro, mt_SB_Riesgo_por_Rubro) | IDMC | ✅ | ⏳ | Reapontar a conexão Snowflake do IDMC para a conta nova; cria `COMERCIOS_MAESTRO` (18) e `RIESGO_POR_RUBRO` (33) |
-| 10 | `scripts/bootstrap/01_post_idmc_grants.sql` | FR_DEMO_ADMIN | ✅ | ⏳ | RLS em `RIESGO_POR_RUBRO`; esperado 5849 ao analista |
+| 9 | Mappings IDMC (mt_SB_Comercios_Maestro, mt_SB_Riesgo_por_Rubro) | IDMC | ✅ | ⏳ | Reapontar a conexão Snowflake do IDMC para a conta nova; cria `COMERCIOS_MAESTRO` (18) e `RIESGO_POR_RUBRO` (33) na conta antiga — na nova os agregados somarão 50.000.000 |
+| 10 | `scripts/bootstrap/01_post_idmc_grants.sql` | FR_DEMO_ADMIN | ✅ | ⏳ | RLS em `RIESGO_POR_RUBRO`; validado na antiga (5849 ao analista), na nova espera 15.969.793 (RETAIL) |
 | 11 | `scripts/session-3-governance/sql/04_audit_logs.sql` | ACCOUNTADMIN | ⚠️ (sem `AUDIT_QUERY_LOG`) | ⏳ | Contém comandos que **devem falhar** (AE-05) |
 | 12 | `scripts/session-3-governance/sql/05_external_access_marketplace.sql` — bloco 0 | ACCOUNTADMIN | ✅ | ⏳ | Blocos A/C são da demo. **Reexecutar o passo 6 apaga a linha FR_EXTERNAL_READER: rodar o bloco 0 de novo depois** |
 | 13 | `scripts/session-3-governance/sql/06_cai_marketplace_provisioner.sql` | ACCOUNTADMIN | ⏳ | ⏳ | Rodar **só na conta nova**. Token (PAT) aparece uma vez: direto para a conexão do CAI |

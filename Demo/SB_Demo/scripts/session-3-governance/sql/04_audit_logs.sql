@@ -13,7 +13,7 @@
 -- =============================================================================
 
 USE ROLE FR_DEMO_ADMIN;
-USE WAREHOUSE WH_APP_XSMALL;
+USE WAREHOUSE WH_APP_MEDIUM;
 
 -- -----------------------------------------------------------------------------
 -- 0. Generate activity as DEMO_ANALYST (run in a separate session/worksheet)

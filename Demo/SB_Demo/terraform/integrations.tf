@@ -6,9 +6,9 @@
 # admin privileges through secondary roles.
 #
 #   Tool          User                 Role                  Warehouse
-#   IDMC CDI      var.user_idmc_cdi     FR_IDMC_INTEGRATION   WH_INGESTION_XSMALL
-#   IDMC CDGC     var.user_idmc_cdgc    FR_CATALOG_READER     WH_APP_XSMALL
-#   Power BI      var.user_bi_analyst   FR_BI_ANALYST (exists) WH_APP_XSMALL
+#   IDMC CDI      var.user_idmc_cdi     FR_IDMC_INTEGRATION   WH_INGESTION_MEDIUM
+#   IDMC CDGC     var.user_idmc_cdgc    FR_CATALOG_READER     WH_APP_MEDIUM
+#   Power BI      var.user_bi_analyst   FR_BI_ANALYST (exists) WH_APP_MEDIUM
 #
 # Hierarchy:  FR_DEMO_ADMIN
 #               ├── FR_IDMC_INTEGRATION   (writes only to IDMC_LANDING_SCHEMA)

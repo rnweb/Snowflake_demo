@@ -25,7 +25,7 @@ try:
         user=user,
         password=password,
         role="FR_EXTERNAL_READER",
-        warehouse="WH_APP_XSMALL",
+        warehouse="WH_APP_MEDIUM",
         database="SUPERINTENDENCY_DEMO_DB",
         schema="CORE_BANKING_SCHEMA",
         session_parameters={"QUERY_TAG": "marketplace-external-check"},
