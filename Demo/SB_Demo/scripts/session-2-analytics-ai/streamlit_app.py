@@ -9,9 +9,16 @@ Interfaz en español para la demo de la Superintendencia de Bancos:
 3. Caja de texto con funciones de Cortex (AI_SUMMARIZE) — se muestra un
    aviso amable si la función no está disponible en la cuenta.
 
-Conexión: st.connection("snowflake") (identidad de la aplicación desplegada);
-la sesión se cambia a FR_DATA_ENGINEER de forma vigilada, con repuesto al
-rol de despliegue si el cambio no está permitido.
+Conexión: en Streamlit in Snowflake se usa la sesión activa
+(snowflake.snowpark.context.get_active_session); en desarrollo local se
+recurre a st.connection("snowflake"). La sesión se cambia a
+FR_DATA_ENGINEER de forma vigilada, con repuesto al rol de despliegue.
+
+Diseño defensivo (para el ensayo general): cada sección se ejecuta bajo
+try/except y los tipos se normalizan explícitamente (str/float) antes de
+llegar a los elementos de Streamlit, de modo que un fallo puntual se
+muestra como mensaje en lugar de tumbar la aplicación completa.
+Sin plotly: gráficos nativos de Streamlit (bar_chart/line_chart).
 
 IMPORTANTE (guardrail): esta app NO se despliega desde la automatización.
 Requiere revisión humana y aprobación explícita antes del CREATE STREAMLIT
@@ -21,7 +28,6 @@ Requiere revisión humana y aprobación explícita antes del CREATE STREAMLIT
 import json
 
 import pandas as pd
-import plotly.express as px
 import streamlit as st
 
 DB = "SUPERINTENDENCY_DEMO_DB"
@@ -40,9 +46,14 @@ st.set_page_config(
 
 @st.cache_resource(show_spinner=False)
 def get_session():
-    """Sesión Snowflake de la aplicación (rol de despliegue -> ingeniero)."""
-    conn = st.connection("snowflake")
-    session = conn.session()
+    """Sesión Snowflake de la aplicación (SIS: sesión activa; local: conexión)."""
+    try:
+        from snowflake.snowpark.context import get_active_session
+
+        session = get_active_session()
+    except Exception:
+        conn = st.connection("snowflake")
+        session = conn.session()
     try:
         session.use_role("FR_DATA_ENGINEER")
     except Exception:
@@ -51,9 +62,21 @@ def get_session():
     return session
 
 
+def _clean(df: pd.DataFrame) -> pd.DataFrame:
+    """Normaliza columnas a str y Decimal a float (compatibilidad SIS)."""
+    df = df.copy()
+    df.columns = [str(c) for c in df.columns]
+    for col in df.columns:
+        if df[col].dtype == object:
+            muestra = df[col].dropna().head(1)
+            if len(muestra) and type(muestra.iloc[0]).__name__ == "Decimal":
+                df[col] = df[col].astype("float64")
+    return df
+
+
 @st.cache_data(ttl=300, show_spinner="Cargando datos de la franquicia...")
 def run_query(sql: str) -> pd.DataFrame:
-    return get_session().sql(sql).to_pandas()
+    return _clean(get_session().sql(sql).to_pandas())
 
 
 def kpis() -> None:
@@ -79,47 +102,28 @@ def kpis() -> None:
 
 
 def graficos() -> None:
-    left, right = st.columns(2)
+    st.subheader("Monto por categoría")
+    df_cat = run_query(
+        f"""
+        SELECT CATEGORIA,
+               SUM(MONTO) AS MONTO_TOTAL
+        FROM {MART}
+        GROUP BY CATEGORIA
+        ORDER BY MONTO_TOTAL DESC
+        """
+    )
+    st.bar_chart(df_cat, x="CATEGORIA", y="MONTO_TOTAL", use_container_width=True)
 
-    with left:
-        st.subheader("Monto por categoría")
-        df_cat = run_query(
-            f"""
-            SELECT CATEGORIA,
-                   SUM(MONTO) AS MONTO_TOTAL
-            FROM {MART}
-            GROUP BY CATEGORIA
-            ORDER BY MONTO_TOTAL DESC
-            """
-        )
-        fig = px.bar(
-            df_cat,
-            x="CATEGORIA",
-            y="MONTO_TOTAL",
-            labels={"CATEGORIA": "Categoría", "MONTO_TOTAL": "Monto total ($)"},
-        )
-        fig.update_layout(height=360, margin=dict(t=30, b=10))
-        st.plotly_chart(fig, use_container_width=True)
-
-    with right:
-        st.subheader("Distribución por estado")
-        df_est = run_query(
-            f"""
-            SELECT ESTADO, COUNT(*) AS OPERACIONES
-            FROM {MART}
-            GROUP BY ESTADO
-            ORDER BY OPERACIONES DESC
-            """
-        )
-        fig = px.pie(
-            df_est,
-            names="ESTADO",
-            values="OPERACIONES",
-            hole=0.45,
-            labels={"ESTADO": "Estado"},
-        )
-        fig.update_layout(height=360, margin=dict(t=30, b=10))
-        st.plotly_chart(fig, use_container_width=True)
+    st.subheader("Distribución por estado")
+    df_est = run_query(
+        f"""
+        SELECT ESTADO, COUNT(*) AS OPERACIONES
+        FROM {MART}
+        GROUP BY ESTADO
+        ORDER BY OPERACIONES DESC
+        """
+    )
+    st.bar_chart(df_est, x="ESTADO", y="OPERACIONES", use_container_width=True)
 
     st.subheader("Evolución mensual del monto transado")
     df_mes = run_query(
@@ -132,15 +136,7 @@ def graficos() -> None:
         """
     )
     df_mes["MES"] = pd.to_datetime(df_mes["MES"]).dt.strftime("%Y-%m")
-    fig = px.line(
-        df_mes,
-        x="MES",
-        y="MONTO_TOTAL",
-        markers=True,
-        labels={"MES": "Mes", "MONTO_TOTAL": "Monto total ($)"},
-    )
-    fig.update_layout(height=320, margin=dict(t=30, b=10))
-    st.plotly_chart(fig, use_container_width=True)
+    st.line_chart(df_mes, x="MES", y="MONTO_TOTAL", use_container_width=True)
 
 
 def tabla_alertas() -> None:
@@ -203,7 +199,8 @@ def evaluador_riesgo() -> None:
         FROM (SELECT 1 AS MUESTRA)
         """
         try:
-            payload = json.loads(get_session().sql(sql).collect()[0][0])
+            crudo = get_session().sql(sql).collect()[0][0]
+            payload = json.loads(crudo) if isinstance(crudo, str) else dict(crudo)
             alerta = int(payload.get("PRED_ES_FRAUDE", 0)) == 1
         except Exception as exc:  # noqa: BLE001 - se muestra al presentador
             st.error(f"No fue posible invocar el modelo: {exc}")
@@ -242,7 +239,7 @@ def caja_cortex() -> None:
             resumen = get_session().sql(
                 f"SELECT AI_SUMMARIZE({literal})"
             ).collect()[0][0]
-            st.info(resumen)
+            st.info(str(resumen))
         except Exception as exc:  # noqa: BLE001
             if "399258" in str(exc) or "399270" in str(exc):
                 st.warning(
@@ -253,6 +250,13 @@ def caja_cortex() -> None:
                 )
             else:
                 st.error(f"Error al invocar Cortex: {exc}")
+
+
+def _seccion(nombre: str, funcion) -> None:
+    try:
+        funcion()
+    except Exception as exc:  # noqa: BLE001 - resiliencia del ensayo general
+        st.error(f"La sección «{nombre}» no está disponible: {exc}")
 
 
 def main() -> None:
@@ -285,15 +289,15 @@ def main() -> None:
         st.error(f"No fue posible conectar con Snowflake: {exc}")
         st.stop()
 
-    kpis()
+    _seccion("KPIs de la franquicia", kpis)
     st.divider()
-    graficos()
+    _seccion("Gráficos", graficos)
     st.divider()
-    tabla_alertas()
+    _seccion("Transacciones prioritarias", tabla_alertas)
     st.divider()
-    evaluador_riesgo()
+    _seccion("Evaluación de riesgo", evaluador_riesgo)
     st.divider()
-    caja_cortex()
+    _seccion("Resumen con Cortex", caja_cortex)
 
 
 if __name__ == "__main__":
