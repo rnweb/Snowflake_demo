@@ -2,7 +2,7 @@
 -- Session 1 — 02: COPY INTO raw tables from the internal stage
 -- ============================================================================
 -- Files are PUT by python/generate_and_load.py into @RAW_STAGE.
--- Role: FR_DATA_ENGINEER | Warehouse: WH_INGESTION_XSMALL
+-- Role: FR_DATA_ENGINEER | Warehouse: WH_INGESTION_MEDIUM
 -- ============================================================================
 
 -- Idempotent re-runs: raw landing tables are reloaded from scratch

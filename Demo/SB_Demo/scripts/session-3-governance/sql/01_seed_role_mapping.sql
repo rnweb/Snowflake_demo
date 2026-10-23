@@ -1,7 +1,7 @@
 -- =============================================================================
 -- Session 3 — 01: Seed ROLE_MAPPING + bind the row access policy
 -- =============================================================================
--- Rol: FR_DEMO_ADMIN | Almacén: WH_APP_XSMALL
+-- Rol: FR_DEMO_ADMIN | Almacén: WH_APP_MEDIUM
 --
 -- Purpose: mapping-table rows and the ALTER TABLE ... ADD ROW ACCESS POLICY
 -- binding live in SQL (data stays out of Terraform); the policy object itself
@@ -15,6 +15,7 @@
 -- Expected after the seed:
 --   FR_BI_ANALYST    -> RETAIL only        (analyst persona)
 --   FR_DATA_ENGINEER -> PYME/CORPORATIVO/RETAIL (dbt + ML keep full access)
+--   FR_IDMC_INTEGRATION / FR_CATALOG_READER -> all units (IDMC CDI / CDGC)
 --   FR_DEMO_ADMIN / ACCOUNTADMIN bypass the policy entirely (policy body).
 -- =============================================================================
 
@@ -29,10 +30,18 @@ VALUES
     ('FR_BI_ANALYST', 'RETAIL', 'Persona analista — solo ve la unidad de negocio RETAIL'),
     ('FR_DATA_ENGINEER', 'PYME', 'Persona ingeniera — acceso completo (pipeline dbt/ML)'),
     ('FR_DATA_ENGINEER', 'CORPORATIVO', 'Persona ingeniera — acceso completo (pipeline dbt/ML)'),
-    ('FR_DATA_ENGINEER', 'RETAIL', 'Persona ingeniera — acceso completo (pipeline dbt/ML)');
+    ('FR_DATA_ENGINEER', 'RETAIL', 'Persona ingeniera — acceso completo (pipeline dbt/ML)'),
+    -- External integrations (terraform/integrations.tf): without these rows the
+    -- policy returns ZERO rows, silently, to IDMC CDI and IDMC CDGC.
+    ('FR_IDMC_INTEGRATION', 'PYME', 'IDMC CDI — integración (acceso completo)'),
+    ('FR_IDMC_INTEGRATION', 'CORPORATIVO', 'IDMC CDI — integración (acceso completo)'),
+    ('FR_IDMC_INTEGRATION', 'RETAIL', 'IDMC CDI — integración (acceso completo)'),
+    ('FR_CATALOG_READER', 'PYME', 'IDMC CDGC — catálogo y perfilamiento'),
+    ('FR_CATALOG_READER', 'CORPORATIVO', 'IDMC CDGC — catálogo y perfilamiento'),
+    ('FR_CATALOG_READER', 'RETAIL', 'IDMC CDGC — catálogo y perfilamiento');
 
 -- -----------------------------------------------------------------------------
--- 2. Verify the seed (4 rows expected)
+-- 2. Verify the seed (10 rows expected)
 -- -----------------------------------------------------------------------------
 SELECT ROLE_NAME, BUSINESS_UNIT, DESCRIPTION
 FROM SUPERINTENDENCY_DEMO_DB.GOVERNANCE_SCHEMA.ROLE_MAPPING

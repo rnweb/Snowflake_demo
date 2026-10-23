@@ -14,8 +14,8 @@ variables (fail-fast if missing):
                SNOWFLAKE_PRIVATE_KEY_PATH / SNOWFLAKE_PRIVATE_KEY
     optional : SNOWFLAKE_AUTHENTICATOR (default SNOWFLAKE_JWT),
                SNOWFLAKE_ROLE        (default FR_BI_ANALYST),
-               SNOWFLAKE_WAREHOUSE   (default WH_APP_XSMALL — small warehouse,
-               the tool never needs WH_CORTEX_LARGE)
+               SNOWFLAKE_WAREHOUSE   (default WH_APP_MEDIUM — small warehouse,
+               the tool never needs WH_TRANSFORM_LARGE)
 
 Governance: RUT is masked by MASK_NATIONAL_ID with a *deterministic*
 pseudonym (``'***-**-' || right(sha2(val, 256), 12)`` — see
@@ -91,7 +91,7 @@ def _connect() -> snowflake.connector.SnowflakeConnection:
         "user": user,
         "authenticator": os.environ.get("SNOWFLAKE_AUTHENTICATOR", "SNOWFLAKE_JWT"),
         "role": os.environ.get("SNOWFLAKE_ROLE", "FR_BI_ANALYST"),
-        "warehouse": os.environ.get("SNOWFLAKE_WAREHOUSE", "WH_APP_XSMALL"),
+        "warehouse": os.environ.get("SNOWFLAKE_WAREHOUSE", "WH_APP_MEDIUM"),
         "database": DB,
         "schema": SCHEMA,
         "login_timeout": 20,

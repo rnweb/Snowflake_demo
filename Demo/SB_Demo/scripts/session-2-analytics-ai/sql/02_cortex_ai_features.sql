@@ -1,7 +1,7 @@
 -- =============================================================================
 -- Session 2 — 02: Funciones de Inteligencia Artificial de Cortex (español)
 -- =============================================================================
--- Rol: FR_DATA_ENGINEER | Almacén: WH_CORTEX_LARGE
+-- Rol: FR_DATA_ENGINEER | Almacén: WH_TRANSFORM_LARGE
 --
 -- Estas consultas demuestran las funciones de texto de Snowflake Cortex sobre
 -- los datos de la demo bancaria (espacio de nombres moderno AI_*):
@@ -246,7 +246,7 @@ SELECT AI_COMPLETE(
 -- -----------------------------------------------------------------------------
 -- RAG - Notas de despliegue y consideraciones
 -- -----------------------------------------------------------------------------
--- - Rol: FR_DATA_ENGINEER (usa WH_CORTEX_LARGE). Necesita USAGE on
+-- - Rol: FR_DATA_ENGINEER (usa WH_TRANSFORM_LARGE). Necesita USAGE on
 --   SUPERINTENDENCY_DEMO_DB + build en CORTEX_VECTOR_STORE (grants via IaC).
 -- - En cuentas nuevas usa SIEMPRE el espacio de nombres AI_* (AI_SUMMARIZE,
 --   AI_TRANSLATE, AI_COMPLETE, AI_EMBED, AI_EXTRACT). Las funciones heredadas

@@ -52,18 +52,22 @@ python Demo/SB_Demo/scripts/session-1-lakehouse/python/generate_and_load.py
 The script (deterministic seed 42) generates the CSVs, runs
 `sql/01_create_raw_tables.sql`, PUTs to `@RAW_STAGE` and executes
 `sql/02_load_raw_data.sql` — all as **`FR_DATA_ENGINEER`** on
-**`WH_INGESTION_XSMALL`**. Expected output:
+**`WH_INGESTION_MEDIUM`**. Expected output:
 
 ```
 [1/4] generated clientes            600 rows ...
 [1/4] generated tarjetas_credito    928 rows ...
 [1/4] generated transacciones     18000 rows ...
-[2/4] connected as FR_DATA_ENGINEER on WH_INGESTION_XSMALL
+[2/4] connected as FR_DATA_ENGINEER on WH_INGESTION_MEDIUM
        STAGING_SCHEMA.clientes              600 rows
        STAGING_SCHEMA.tarjetas_credito      928 rows
        STAGING_SCHEMA.transacciones       18000 rows
 Session 1 raw ingestion complete.
 ```
+
+> Transcript of the original 18 000-row loader run. PG-06 (2026-10-21)
+> subsequently scaled `STAGING_SCHEMA.TRANSACCIONES` to **50 000 000** rows
+> with `sql/04_generator_50m_transacciones.sql` + `dbt build --full-refresh`.
 
 Re-running is safe: raw tables are truncated and reloaded, and all dbt models
 are rebuilt by `dbt build`.
@@ -79,7 +83,7 @@ dbt source freshness --profiles-dir .  # 3/3 sources fresh
 ```
 
 - `profiles.yml` pins `role: FR_DATA_ENGINEER`,
-  `database: SUPERINTENDENCY_DEMO_DB`, `warehouse: WH_INGESTION_XSMALL`
+  `database: SUPERINTENDENCY_DEMO_DB`, `warehouse: WH_INGESTION_MEDIUM`
 - Staging layer (`STAGING_SCHEMA`): views `stg_clientes`,
   `stg_tarjetas_credito`, `stg_transacciones`
 - Core layer (`CORE_BANKING_SCHEMA`): `client_profile_dim` (table),
@@ -88,6 +92,16 @@ dbt source freshness --profiles-dir .  # 3/3 sources fresh
 Expected result: **`PASS=41 WARN=0 ERROR=0`** — 41 passes = 5 models
 (3 views + 2 marts) + 36 tests — and **`3/3 sources fresh`**.
 
+> **Governance caveat:** every `dbt build` recreates `CLIENT_PROFILE_DIM`
+> (`CREATE OR REPLACE TABLE`), and Snowflake silently detaches the RUT masking
+> policy when a table is replaced (the FK relationship test then fails with
+> masked-vs-plaintext values). Re-attach afterwards:
+> `terraform apply -target=snowflake_table_column_masking_policy_application.national_id`
+> (drift is detected on refresh). Re-run `dbt test` for the relationship test
+> after re-attaching. The incremental fact table is untouched by plain builds —
+> only `--full-refresh` replaces it and also requires re-attaching
+> `national_id_fact` + `credit_card` plus the RLS rebind (see session 3).
+
 ## Step 3 — Apache Iceberg lakehouse proof (open format, Snowflake-managed)
 
 ```bash
@@ -95,22 +109,26 @@ snowsql -f Demo/SB_Demo/scripts/session-1-lakehouse/sql/03_iceberg_lakehouse_dem
 # ...or paste the file into a Snowsight worksheet
 ```
 
-Run as **`FR_DATA_ENGINEER`** on **`WH_INGESTION_XSMALL`**. The script is
+Run as **`FR_DATA_ENGINEER`** on **`WH_INGESTION_MEDIUM`**. The script is
 self-contained and re-runnable (`IF NOT EXISTS`, `TRUNCATE`, `OVERWRITE`):
 
 1. Creates the internal stage `STAGING_SCHEMA.ICEBERG_DEMO_STAGE`
-2. Exports all 18 000 mart rows to the stage as **Parquet**
-   (`data_0_0_0.snappy.parquet`, ~518 KB)
+2. Exports all mart rows to the stage as **Parquet**
+   (50 000 000 rows since PG-06 — 6 files, ~1.15 GB; the export runs with
+   masking active, so RUT/tarjeta land as tokens)
 3. Creates `CORE_BANKING_SCHEMA.HISTORICO_TRANSACCIONES_ICEBERG` with
    `CREATE ICEBERG TABLE ... CATALOG = 'SNOWFLAKE'`
 4. Loads the full history into it
+
+> Run with a current database (`USE DATABASE SUPERINTENDENCY_DEMO_DB;` first —
+> the stage statements are not fully qualified).
 
 Verification (expected results):
 
 | Check | Expected |
 |-------|----------|
 | `SHOW TABLES LIKE 'HISTORICO%'` | `is_iceberg = 'Y'` (Snowsight shows the Iceberg badge) |
-| Row parity query | `FUENTE = 18000`, `ICEBERG = 18000` |
+| Row parity query | `FUENTE = 50000000`, `ICEBERG = 50000000` (re-run 2026-10-22; original seed was 18 000 on both sides) |
 | `LIST @...ICEBERG_DEMO_STAGE/historico_transacciones/` | `data_0_0_0.snappy.parquet` |
 
 Presenter talking points:

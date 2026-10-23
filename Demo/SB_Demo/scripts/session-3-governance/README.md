@@ -8,9 +8,9 @@ complement — all discoverable in Snowsight.
 
 | Persona (role) | `RUT` (dim + fact) / `NUMERO_TARJETA` | Business units visible |
 |----------------|----------------------------------------|------------------------|
-| `FR_DEMO_ADMIN` / `ACCOUNTADMIN` | **plaintext** (policy bypass) | PYME + CORPORATIVO + RETAIL (18 000 rows) |
+| `FR_DEMO_ADMIN` / `ACCOUNTADMIN` | **plaintext** (policy bypass) | PYME + CORPORATIVO + RETAIL (50 000 000 rows) |
 | `FR_DATA_ENGINEER` | pseudonym `***-**-<12 hex>` / masked `****-****-****-****` | all three — mapped to every unit (dbt/ML keep working) |
-| `FR_BI_ANALYST` | pseudonym `***-**-<12 hex>` / masked `****-****-****-****` | **RETAIL only (5 849 rows)** |
+| `FR_BI_ANALYST` | pseudonym `***-**-<12 hex>` / masked `****-****-****-****` | **RETAIL only (15 969 793 rows)** |
 
 The RUT mask is **deterministic** (`'***-**-' || right(sha2(val,256),12)`):
 non-admins always see the same pseudonym for the same RUT, and filters keep
@@ -52,8 +52,8 @@ to filter as `FR_BI_ANALYST`.
   (3 column-policy applications)
 - Environment: `SNOWFLAKE_ACCOUNT`, `SNOWFLAKE_USER` (key-pair),
   `SNOWFLAKE_PRIVATE_KEY_PATH`
-- Role: `FR_DEMO_ADMIN` (granted to `OPERATIONS`), warehouse: `WH_APP_XSMALL`
-  (the analyst has no `WH_INGESTION_XSMALL` grant)
+- Role: `FR_DEMO_ADMIN` (granted to `OPERATIONS`), warehouse: `WH_APP_MEDIUM`
+  (the analyst has no `WH_INGESTION_MEDIUM` grant)
 
 ## Step 1 — Seed + RLS binding
 
@@ -96,7 +96,7 @@ session would inherit `FR_DATA_ENGINEER`'s raw-layer privileges even though
 | `CORE_BANKING_SCHEMA.CLIENT_PROFILE_DIM.RUT` | `5.000.081-8` (plaintext) | `***-**-<12 hex>` pseudonym (same token as admin's `5.000.081-8`) |
 | `CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS.RUT` | `5.000.081-8` (plaintext) | `***-**-<12 hex>` pseudonym (identical to the dim token → joins/filters still match) |
 | `CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS.NUMERO_TARJETA` | `3714-4911-9269-2129` | `****-****-****-****` |
-| Rows per unit (`CREDIT_CARD_TRANSACTIONS`) | `CORPORATIVO 5928 / PYME 6223 / RETAIL 5849` (18 000) | `RETAIL 5849` only |
+| Rows per unit (`CREDIT_CARD_TRANSACTIONS`) | `CORPORATIVO 16 506 994 / PYME 17 523 213 / RETAIL 15 969 793` (50 000 000) | `RETAIL 15 969 793` only |
 | `GOVERNANCE_SCHEMA.ROLE_MAPPING` | 4 rows visible | n/a |
 
 ## Step 3 — Horizon object tagging

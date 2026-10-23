@@ -17,8 +17,8 @@ refactored copies live in `scripts/`).
 | `ORDERS_TABLE` | `CREDIT_CARD_TRANSACTIONS` | High-volume transactional fact table. |
 | `DATA_ENGINEER_ROLE` | `FR_DATA_ENGINEER` | Functional role mapping for pipeline creation. |
 | `ANALYST_ROLE` | `FR_BI_ANALYST` | Functional role to test masking policies (masked view). |
-| `COMPUTE_WH` | `WH_INGESTION_XSMALL` | Compute dedicated to Snowpipe and dbt runs. |
-| `ANALYTICS_WH` | `WH_CORTEX_LARGE` | Compute allocated for ML and Cortex LLM queries. |
+| `COMPUTE_WH` | `WH_INGESTION_MEDIUM` | Raw ingestion loads (COPY/PUT) and staging work. |
+| `ANALYTICS_WH` | `WH_TRANSFORM_LARGE` | Heavy ETL/dbt transforms (dbt default) and ML/Cortex queries. |
 
 ## Derived Objects — APPROVED (v2.0)
 
@@ -27,7 +27,7 @@ refactored copies live in `scripts/`).
 | dbt intermediate layer | `STAGING_SCHEMA` | dbt requires a staging schema between raw and analytics. |
 | Policies & mapping tables | `GOVERNANCE_SCHEMA` | Masking/row-access policies and role-mapping tables (Session 3). |
 | Agent-scoped admin role | `FR_DEMO_ADMIN` | Scoped replacement for ACCOUNTADMIN per security guardrails. |
-| Streamlit compute | `WH_APP_XSMALL` | Session 2 app compute, separated from WH_CORTEX_LARGE. |
+| Streamlit compute | `WH_APP_MEDIUM` | Session 2 app compute, separated from WH_TRANSFORM_LARGE. |
 | Native App package database | `CORTEX_NATIVE_APP_DB` | Native Apps require a separate application package database. |
 
 ## Phase 2 Decisions — APPROVED

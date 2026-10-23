@@ -73,8 +73,8 @@ resource "snowflake_external_access_integration" "api_currency_integration" {
 # ---------------------------------------------------------------------------
 resource "snowflake_warehouse" "ingestion" {
   name                         = var.wh_ingestion
-  comment                      = "Snowpipe and dbt runs."
-  warehouse_size               = "XSMALL"
+  comment                      = "Raw ingestion loads (COPY/PUT) and staging work."
+  warehouse_size               = "MEDIUM"
   auto_suspend                 = 60
   auto_resume                  = true
   initially_suspended          = true
@@ -83,7 +83,7 @@ resource "snowflake_warehouse" "ingestion" {
 
 resource "snowflake_warehouse" "cortex" {
   name                         = var.wh_cortex
-  comment                      = "ML training and Cortex LLM queries."
+  comment                      = "Heavy ETL/dbt transforms and ML/Cortex benches."
   warehouse_size               = "LARGE"
   auto_suspend                 = 120
   auto_resume                  = true
@@ -94,7 +94,7 @@ resource "snowflake_warehouse" "cortex" {
 resource "snowflake_warehouse" "app" {
   name                         = var.wh_app
   comment                      = "Streamlit / Native App UI compute."
-  warehouse_size               = "XSMALL"
+  warehouse_size               = "MEDIUM"
   auto_suspend                 = 60
   auto_resume                  = true
   initially_suspended          = true

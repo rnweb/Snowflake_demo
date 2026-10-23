@@ -18,5 +18,31 @@ superintendency_demo:
       role: FR_DATA_ENGINEER
       database: SUPERINTENDENCY_DEMO_DB
       schema: STAGING_SCHEMA
-      warehouse: WH_INGESTION_XSMALL
+      warehouse: WH_TRANSFORM_LARGE
       threads: 8
+
+    # Azure DevOps CI/CD targets (C05). Password auth from pipeline secret
+    # variables; never committed. DEV is a zero-copy clone of PROD
+    # (see ../cicd/sql/00_setup_dev_and_deploy_log.sql).
+    ci_dev:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('SNOWFLAKE_USER') }}"
+      password: "{{ env_var('SNOWFLAKE_PASSWORD') }}"
+      role: FR_DATA_ENGINEER
+      database: SUPERINTENDENCY_DEMO_DB_DEV
+      schema: STAGING_SCHEMA
+      warehouse: WH_TRANSFORM_LARGE
+      threads: 4
+      query_tag: "azdo-ci-dev"
+    ci_prod:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('SNOWFLAKE_USER') }}"
+      password: "{{ env_var('SNOWFLAKE_PASSWORD') }}"
+      role: FR_DATA_ENGINEER
+      database: SUPERINTENDENCY_DEMO_DB
+      schema: STAGING_SCHEMA
+      warehouse: WH_TRANSFORM_LARGE
+      threads: 4
+      query_tag: "azdo-cd-prod"

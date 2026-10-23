@@ -1,7 +1,7 @@
 -- =============================================================================
 -- Session 3 — 03: Horizon object-tagging demo (PII classification)
 -- =============================================================================
--- Rol: FR_DEMO_ADMIN | Almacén: WH_APP_XSMALL
+-- Rol: FR_DEMO_ADMIN | Almacén: WH_APP_MEDIUM
 --
 -- Purpose: tag the PII columns so they are discoverable in Snowsight's Data
 -- Governance Center (Object Tagging) — the Horizon complement to the masking

@@ -13,11 +13,11 @@
 -- Run as FR_DATA_ENGINEER (holds CREATE STREAMLIT + stage READ/WRITE on
 -- CORTEX_NATIVE_APP_DB.PUBLIC — see terraform/security.tf).
 -- Expected: SHOW STREAMLITS returns PANEL_PREVENCION_FRAUDE with
--- query_warehouse WH_APP_XSMALL (small warehouse — trial-credit guardrail).
+-- query_warehouse WH_APP_MEDIUM (small warehouse — trial-credit guardrail).
 -- =============================================================================
 
 USE ROLE FR_DATA_ENGINEER;
-USE WAREHOUSE WH_APP_XSMALL;
+USE WAREHOUSE WH_APP_MEDIUM;
 USE DATABASE CORTEX_NATIVE_APP_DB;
 USE SCHEMA PUBLIC;
 
@@ -27,7 +27,7 @@ PUT file://Demo/SB_Demo/scripts/session-2-analytics-ai/streamlit_app.py
 CREATE OR REPLACE STREAMLIT PANEL_PREVENCION_FRAUDE
   ROOT_LOCATION = '@CORTEX_NATIVE_APP_DB.PUBLIC.STREAMLIT_STAGE'
   MAIN_FILE      = 'streamlit_app.py'
-  QUERY_WAREHOUSE = 'WH_APP_XSMALL'
+  QUERY_WAREHOUSE = 'WH_APP_MEDIUM'
   COMMENT = 'Panel de Prevención de Fraude — demo Superintendencia de Bancos';
 
 SHOW STREAMLITS IN DATABASE CORTEX_NATIVE_APP_DB;

@@ -1,7 +1,7 @@
 -- =============================================================================
 -- Session 1 — 03: Apache Iceberg lakehouse demo (open table format)
 -- =============================================================================
--- Rol: FR_DATA_ENGINEER | Almacén: WH_INGESTION_XSMALL
+-- Rol: FR_DATA_ENGINEER | Almacén: WH_INGESTION_MEDIUM
 --
 -- Purpose: prove that Snowflake acts as a true Data Lakehouse over OPEN
 -- formats — the same Parquet files on an internal stage remain readable by
@@ -88,7 +88,9 @@ FROM SUPERINTENDENCY_DEMO_DB.CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS;
 -- 5a. The table is registered as ICEBERG: SHOW TABLES reports is_iceberg = 'Y'
 SHOW TABLES LIKE 'HISTORICO_TRANSACCIONES_ICEBERG' IN SCHEMA SUPERINTENDENCY_DEMO_DB.CORE_BANKING_SCHEMA;
 
--- 5b. Row parity with the source mart (18 000)
+-- 5b. Row parity with the source mart (re-run 2026-10-22: both sides
+--     50 000 000 after PG-06; the export runs with masking active, so
+--     RUT/tarjeta are stored as pseudonym/mask tokens)
 SELECT
     (SELECT COUNT(*) FROM SUPERINTENDENCY_DEMO_DB.CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS) AS FUENTE,
     (SELECT COUNT(*) FROM SUPERINTENDENCY_DEMO_DB.CORE_BANKING_SCHEMA.HISTORICO_TRANSACCIONES_ICEBERG) AS ICEBERG;
