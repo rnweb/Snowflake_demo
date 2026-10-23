@@ -38,7 +38,6 @@ REGISTRY_SCHEMA = "RISK_ANALYTICS_SCHEMA"
 
 st.set_page_config(
     page_title="Panel de Prevención de Fraude",
-    page_icon=None,
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -63,15 +62,35 @@ def get_session():
 
 
 def _clean(df: pd.DataFrame) -> pd.DataFrame:
-    """Normaliza columnas a str y Decimal a float (compatibilidad SIS)."""
+    """Normaliza tipos antes de los elementos (compatibilidad SIS).
+
+    Columnas a str, Decimal a float, date/Timestamp a str — el motor de
+    protobuf de SIS rechaza tipos no primitivos con un TypeError opaco.
+    """
     df = df.copy()
     df.columns = [str(c) for c in df.columns]
     for col in df.columns:
-        if df[col].dtype == object:
+        if str(df[col].dtype).startswith("datetime"):
+            df[col] = df[col].astype(str)
+        elif df[col].dtype == object:
             muestra = df[col].dropna().head(1)
-            if len(muestra) and type(muestra.iloc[0]).__name__ == "Decimal":
-                df[col] = df[col].astype("float64")
+            if len(muestra):
+                tipo = type(muestra.iloc[0]).__name__
+                if tipo == "Decimal":
+                    df[col] = df[col].astype("float64")
+                elif tipo in ("date", "datetime", "Timestamp"):
+                    df[col] = df[col].astype(str)
     return df
+
+
+def _entero(valor) -> int:
+    """int null-safe: None/NaN/no numérico -> 0 (no revienta los KPIs)."""
+    try:
+        if valor is None or valor != valor:
+            return 0
+        return int(valor)
+    except (TypeError, ValueError):
+        return 0
 
 
 @st.cache_data(ttl=300, show_spinner="Cargando datos de la franquicia...")
@@ -95,10 +114,10 @@ def kpis() -> None:
         """
     ).iloc[0]
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Transacciones", f"{int(df['TRANSACCIONES']):,}".replace(",", "."))
-    col2.metric("Monto total", f"${int(df['MONTO_TOTAL']):,}".replace(",", "."))
-    col3.metric("Rechazadas", f"{int(df['RECHAZADAS']):,}".replace(",", "."))
-    col4.metric("Alertas de riesgo", f"{int(df['ALERTAS']):,}".replace(",", "."))
+    col1.metric("Transacciones", f"{_entero(df['TRANSACCIONES']):,}".replace(",", "."))
+    col2.metric("Monto total", f"${_entero(df['MONTO_TOTAL']):,}".replace(",", "."))
+    col3.metric("Rechazadas", f"{_entero(df['RECHAZADAS']):,}".replace(",", "."))
+    col4.metric("Alertas de riesgo", f"{_entero(df['ALERTAS']):,}".replace(",", "."))
 
 
 def graficos() -> None:
@@ -301,4 +320,7 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:  # noqa: BLE001 — traza visible en la UI, nunca pantalla en blanco
+        st.exception(e)
