@@ -62,11 +62,14 @@ resource "snowflake_network_rule" "api_currency_rule" {
   value_list = ["api.frankfurter.app"]
 }
 
-resource "snowflake_external_access_integration" "api_currency_integration" {
-  name                  = "API_CURRENCY_INTEGRATION"
-  enabled               = true
-  allowed_network_rules = [snowflake_network_rule.api_currency_rule.fully_qualified_name]
-}
+# DISABLED for trial accounts: External Access Integrations are rejected by
+# Snowflake trial accounts (509009 "External access is not supported for trial
+# accounts"), which made every apply fail. Re-enable on a paid account only.
+# resource "snowflake_external_access_integration" "api_currency_integration" {
+#   name                  = "API_CURRENCY_INTEGRATION"
+#   enabled               = true
+#   allowed_network_rules = [snowflake_network_rule.api_currency_rule.fully_qualified_name]
+# }
 
 # ---------------------------------------------------------------------------
 # Warehouses
@@ -99,6 +102,18 @@ resource "snowflake_warehouse" "app" {
   auto_resume                  = true
   initially_suspended          = true
   statement_timeout_in_seconds = 300
+}
+
+# Dedicated compute for security audits and governance reporting, isolated
+# from ingestion, transforms and the app so audit queries never compete with
+# production workloads (and their cost is attributable on its own).
+resource "snowflake_warehouse" "audit_warehouse" {
+  name                = "WH_AUDIT_SMALL"
+  comment             = "Dedicated warehouse for security audits and governance reporting"
+  warehouse_size      = "XSMALL"
+  auto_suspend        = 60
+  auto_resume         = true
+  initially_suspended = true
 }
 
 # ---------------------------------------------------------------------------
