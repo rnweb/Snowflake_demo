@@ -11,8 +11,17 @@
 --   5. The owner withdraws the order; section C revokes access; reconnect fails.
 --
 -- Run sections A and C as FR_DEMO_ADMIN (CREATE USER comes from ACCOUNTADMIN
--- or a role with CREATE USER). Never write the password in this file: set it
--- in the worksheet at run time and hand it over out-of-band.
+-- or a role with CREATE USER).
+--
+-- CREDENTIALS: this file never contains a password or key, not even a
+-- placeholder. The user is created WITHOUT a password. An admin must configure
+-- the login OUT OF BAND, in a Snowsight worksheet or with a key pair, and hand
+-- it to the external analyst through a secure channel (never in chat, email,
+-- this repository or a script). Example, after section A runs:
+--   ALTER USER EXT_ANALISTA_PYME SET PASSWORD = '<generated in the worksheet>';
+--   -- or key pair: ALTER USER EXT_ANALISTA_PYME SET RSA_PUBLIC_KEY = '<public key body>';
+-- MUST_CHANGE_PASSWORD = TRUE forces the analyst to choose a new password at
+-- first login. DAYS_TO_EXPIRY limits the account lifetime regardless.
 -- =============================================================================
 
 -- -----------------------------------------------------------------------------
@@ -41,9 +50,9 @@ WHERE NOT EXISTS (SELECT 1 FROM SUPERINTENDENCY_DEMO_DB.GOVERNANCE_SCHEMA.ROLE_M
 --    Time-boxed user: expires by itself in 1 day even if nobody revokes it.
 -- -----------------------------------------------------------------------------
 USE ROLE ACCOUNTADMIN;
+-- No PASSWORD clause on purpose: see CREDENTIALS above (set out of band).
 CREATE USER IF NOT EXISTS EXT_ANALISTA_PYME
-  PASSWORD = '<definir_na_hora>'          -- replace in the worksheet only
-  MUST_CHANGE_PASSWORD = FALSE
+  MUST_CHANGE_PASSWORD = TRUE
   DEFAULT_ROLE = FR_EXTERNAL_READER
   DEFAULT_WAREHOUSE = WH_APP_MEDIUM
   DEFAULT_SECONDARY_ROLES = ()
