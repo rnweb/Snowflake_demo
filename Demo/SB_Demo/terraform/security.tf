@@ -95,6 +95,16 @@ resource "snowflake_grant_privileges_to_account_role" "admin_wh_app" {
   }
 }
 
+# Audit warehouse (governance reporting) — usable and observable by the admin role.
+resource "snowflake_grant_privileges_to_account_role" "admin_wh_audit" {
+  account_role_name = snowflake_account_role.admin.name
+  privileges        = ["USAGE", "MONITOR"]
+  on_account_object {
+    object_type = "WAREHOUSE"
+    object_name = snowflake_warehouse.audit_warehouse.name
+  }
+}
+
 resource "snowflake_grant_privileges_to_account_role" "admin_policy_authoring" {
   account_role_name = snowflake_account_role.admin.name
   privileges = [
@@ -238,14 +248,15 @@ resource "snowflake_grant_privileges_to_account_role" "engineer_vector_store_bui
 # USAGE on the external-access integration used by SP_INGEST_EXTERNAL_API
 # (Session 4 - Integraciones y APIs / C03). The network rule and the
 # integration itself live in main.tf.
-resource "snowflake_grant_privileges_to_account_role" "engineer_api_integration_usage" {
-  account_role_name = snowflake_account_role.engineer.name
-  privileges        = ["USAGE"]
-  on_account_object {
-    object_type = "INTEGRATION"
-    object_name = snowflake_external_access_integration.api_currency_integration.fully_qualified_name
-  }
-}
+# DISABLED with the external access integration (trial accounts reject EAIs).
+# resource "snowflake_grant_privileges_to_account_role" "engineer_api_integration_usage" {
+#   account_role_name = snowflake_account_role.engineer.name
+#   privileges        = ["USAGE"]
+#   on_account_object {
+#     object_type = "INTEGRATION"
+#     object_name = snowflake_external_access_integration.api_currency_integration.fully_qualified_name
+#   }
+# }
 
 resource "snowflake_grant_privileges_to_account_role" "engineer_governance_read" {
   account_role_name = snowflake_account_role.engineer.name
