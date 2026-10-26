@@ -29,11 +29,16 @@ clean-targets:
 models:
   superintendency_demo:
     staging:
+      # Views: no storage, so no Fail-safe cost. Transient does not apply.
       +materialized: view
       +schema: STAGING_SCHEMA
     core:
       +materialized: table
       +schema: CORE_BANKING_SCHEMA
+      # Transient: no 7-day Fail-safe storage. These marts are rebuilt from raw,
+      # so Fail-safe adds cost without recovery value. Time Travel still applies.
+      # Note: a transient table cannot be cloned into a permanent one (002120).
+      +transient: true
     # C05 CI/CD artifact. Views only: they never replace the governed core
     # tables (CREATE OR REPLACE TABLE would drop the Terraform-attached
     # masking policies) and they keep RLS, which is evaluated for the caller.
