@@ -7,14 +7,28 @@
 -- Features: MONTO (deciles of the baseline) and HORA (24 buckets), the same
 -- features used by session-2/python/01_train_fraud_model.py.
 -- Run as FR_DATA_ENGINEER (sees all units; PII is never read here).
+--
+-- WAREHOUSE: WH_AUDIT_SMALL (X-Small, auto-suspend 60 s). The drift check reads
+-- only two small tables and a view; it does not need a large warehouse. The
+-- one-time SAMPLE(1) builds scan the 50M mart once and are the slowest step.
+--
+-- DEMO FLOW (run top to bottom):
+--   Setup (sections 0-3) -> simulate drift (section 4) -> STOP THE ALERT (section 5).
+--   Section 5 is part of the demo, not optional cleanup: the alert is scheduled
+--   and would keep running (and consuming credits) after the presentation.
 -- =============================================================================
+
+-- -----------------------------------------------------------------------------
+-- 0. Grants (ACCOUNTADMIN, one time). Also codified in terraform/security.tf
+--    (engineer_wh_audit), so Terraform and the account stay aligned.
+-- -----------------------------------------------------------------------------
 USE ROLE ACCOUNTADMIN;
 GRANT EXECUTE ALERT ON ACCOUNT TO ROLE FR_DATA_ENGINEER;
 GRANT CREATE ALERT, CREATE TABLE, CREATE VIEW ON SCHEMA SUPERINTENDENCY_DEMO_DB.RISK_ANALYTICS_SCHEMA TO ROLE FR_DATA_ENGINEER;
-GRANT USAGE ON WAREHOUSE WH_TRANSFORM_LARGE TO ROLE FR_DATA_ENGINEER;
+GRANT USAGE ON WAREHOUSE WH_AUDIT_SMALL TO ROLE FR_DATA_ENGINEER;
 
 USE ROLE FR_DATA_ENGINEER;
-USE WAREHOUSE WH_TRANSFORM_LARGE;
+USE WAREHOUSE WH_AUDIT_SMALL;
 USE SCHEMA SUPERINTENDENCY_DEMO_DB.RISK_ANALYTICS_SCHEMA;
 
 -- -----------------------------------------------------------------------------
@@ -85,7 +99,7 @@ SELECT * FROM VW_DRIFT_PSI;          -- expected: MONTO and HORA ~0.00x, ESTABLE
 -- 3. Native alert: records an incident whenever the current batch drifts
 -- -----------------------------------------------------------------------------
 CREATE OR REPLACE ALERT ALRT_DRIFT_DETECTOR_FRAUDES
-  WAREHOUSE = WH_TRANSFORM_LARGE
+  WAREHOUSE = WH_AUDIT_SMALL
   SCHEDULE = '60 MINUTE'
   COMMENT = 'C06-AE-06: PSI > 0.25 en alguna feature del DETECTOR_FRAUDES'
   IF (EXISTS (SELECT 1 FROM SUPERINTENDENCY_DEMO_DB.RISK_ANALYTICS_SCHEMA.VW_DRIFT_PSI WHERE PSI > 0.25))
@@ -123,6 +137,9 @@ ORDER BY SCHEDULED_TIME DESC;   -- STATE = TRIGGERED
 SELECT * FROM MODEL_DRIFT_METRICS ORDER BY MEDIDO_EN, FEATURE;
 
 -- -----------------------------------------------------------------------------
--- Cleanup after the demo (keeps history, stops compute)
+-- 5. STOP THE ALERT (live step, run it at the end of the demo, do not skip).
+--    Keeps the drift history; stops the scheduled checks and their credits.
+--    To resume later: ALTER ALERT ALRT_DRIFT_DETECTOR_FRAUDES RESUME;
 -- -----------------------------------------------------------------------------
--- ALTER ALERT ALRT_DRIFT_DETECTOR_FRAUDES SUSPEND;
+ALTER ALERT ALRT_DRIFT_DETECTOR_FRAUDES SUSPEND;
+SHOW ALERTS LIKE 'ALRT_DRIFT_DETECTOR_FRAUDES' IN SCHEMA SUPERINTENDENCY_DEMO_DB.RISK_ANALYTICS_SCHEMA;   -- expected: state = suspended

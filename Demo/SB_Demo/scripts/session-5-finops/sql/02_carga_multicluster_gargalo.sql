@@ -95,18 +95,25 @@ SHOW RESOURCE MONITORS LIKE 'RM_CARGA_ELASTICA';   -- used_credits / remaining_c
 
 -- -----------------------------------------------------------------------------
 -- 6. Bottleneck (C09-AE-04): provoke, diagnose, fix, verify
+--    Apples to apples: the SAME statement text runs twice, on the same data.
+--    Only the warehouse changes: XSMALL (before) -> MEDIUM (after).
+--    Both runs must return the same rows (checked in 6d with RESULT_SCAN).
+--    Cost direction is stated honestly: MEDIUM uses more credits per hour
+--    than XSMALL. The gain is latency, and section 6d shows the credits of each run.
 -- -----------------------------------------------------------------------------
 USE ROLE FR_DATA_ENGINEER;
-USE WAREHOUSE WH_CARGA_ELASTICA;          -- XSMALL: too small for this query on 50M rows
 ALTER SESSION SET USE_CACHED_RESULT = FALSE;
-ALTER SESSION SET QUERY_TAG = 'gargalo-antes';
 
--- 6a. Provoke: global sort + window over 50M rows -> memory pressure -> spilling
-SELECT ID_TARJETA, FECHA_TRANSACCION, MONTO,
-       SUM(MONTO) OVER (PARTITION BY ID_TARJETA ORDER BY FECHA_TRANSACCION
+-- 6a. Provoke (XSMALL): global window over 50M rows -> memory pressure -> spilling.
+--     Deterministic ordering (ID_TRANSACCION as tie-breaker) so results can be compared.
+USE WAREHOUSE WH_CARGA_ELASTICA;          -- XSMALL: too small for this query on 50M rows
+ALTER SESSION SET QUERY_TAG = 'gargalo-antes';
+SELECT ID_TRANSACCION, ID_TARJETA, FECHA_TRANSACCION, MONTO,
+       SUM(MONTO) OVER (PARTITION BY ID_TARJETA
+                        ORDER BY FECHA_TRANSACCION, ID_TRANSACCION
                         ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS ACUMULADO
 FROM SUPERINTENDENCY_DEMO_DB.CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS
-ORDER BY ACUMULADO DESC
+ORDER BY ACUMULADO DESC, ID_TRANSACCION
 LIMIT 100;
 SET Q_ANTES = LAST_QUERY_ID();
 
@@ -123,26 +130,45 @@ SELECT OPERATOR_ID, OPERATOR_TYPE,
 FROM TABLE(GET_QUERY_OPERATOR_STATS($Q_ANTES))
 ORDER BY PCT_TIEMPO DESC NULLS LAST
 LIMIT 5;
--- Root cause: the WindowFunction/Sort operator spills to local storage on XSMALL.
+-- Expected (confirm in the Query Profile before presenting): the window/sort
+-- operator spills to local storage on XSMALL.
 
--- 6c. Fix: right-size compute for this workload (one command, no data change)
---     and remove the unnecessary global sort; Top-N per card is what the business needs
-USE WAREHOUSE WH_TRANSFORM_LARGE;
+-- 6c. Fix (MEDIUM): the IDENTICAL statement on a larger warehouse. Nothing else changes.
+--     WH_INGESTION_MEDIUM is a platform warehouse that FR_DATA_ENGINEER can use.
+USE WAREHOUSE WH_INGESTION_MEDIUM;
 ALTER SESSION SET QUERY_TAG = 'gargalo-despues';
-SELECT ID_TARJETA, MAX(ACUMULADO) AS ACUMULADO
-FROM (SELECT ID_TARJETA,
-             SUM(MONTO) OVER (PARTITION BY ID_TARJETA ORDER BY FECHA_TRANSACCION
-                              ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS ACUMULADO
-      FROM SUPERINTENDENCY_DEMO_DB.CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS)
-GROUP BY ID_TARJETA
-ORDER BY ACUMULADO DESC
+SELECT ID_TRANSACCION, ID_TARJETA, FECHA_TRANSACCION, MONTO,
+       SUM(MONTO) OVER (PARTITION BY ID_TARJETA
+                        ORDER BY FECHA_TRANSACCION, ID_TRANSACCION
+                        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS ACUMULADO
+FROM SUPERINTENDENCY_DEMO_DB.CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS
+ORDER BY ACUMULADO DESC, ID_TRANSACCION
 LIMIT 100;
 SET Q_DESPUES = LAST_QUERY_ID();
 
--- 6d. Verify: elapsed time and spill before vs after
+-- 6d. Verify (apples to apples):
+--   (1) same rows: the two HASH_AGG values must be equal (order-insensitive);
+--   (2) elapsed time and spill for each run;
+--   (3) credits each warehouse consumed (ACCOUNT_USAGE lags up to ~3 h, so
+--       run this part after the rehearsal window, not live).
+SELECT 'ANTES'   AS FASE, HASH_AGG(*) AS HASH_RESULTADO, COUNT(*) AS FILAS
+FROM TABLE(RESULT_SCAN($Q_ANTES))
+UNION ALL
+SELECT 'DESPUES', HASH_AGG(*), COUNT(*)
+FROM TABLE(RESULT_SCAN($Q_DESPUES));
+-- expected: identical HASH_RESULTADO and FILAS = 100. If they differ, the comparison is invalid.
+
 SELECT QUERY_TAG, WAREHOUSE_NAME, WAREHOUSE_SIZE, ROUND(TOTAL_ELAPSED_TIME / 1000, 1) AS SEG,
        BYTES_SPILLED_TO_LOCAL_STORAGE AS SPILL_LOCAL, BYTES_SPILLED_TO_REMOTE_STORAGE AS SPILL_REMOTO
 FROM TABLE(SUPERINTENDENCY_DEMO_DB.INFORMATION_SCHEMA.QUERY_HISTORY_BY_SESSION(RESULT_LIMIT => 50))
 WHERE QUERY_ID IN ($Q_ANTES, $Q_DESPUES)
 ORDER BY START_TIME;
+
+SELECT WAREHOUSE_NAME, ROUND(SUM(CREDITS_USED), 4) AS CREDITOS
+FROM SNOWFLAKE.ACCOUNT_USAGE.WAREHOUSE_METERING_HISTORY
+WHERE WAREHOUSE_NAME IN ('WH_CARGA_ELASTICA', 'WH_INGESTION_MEDIUM')
+  AND START_TIME >= DATEADD('hour', -3, CURRENT_TIMESTAMP())
+GROUP BY 1;
+
 ALTER SESSION UNSET QUERY_TAG;
+ALTER SESSION UNSET USE_CACHED_RESULT;

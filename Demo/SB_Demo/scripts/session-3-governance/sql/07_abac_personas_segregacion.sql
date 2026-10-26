@@ -8,8 +8,8 @@
 -- ABAC  = what a USER may see inside that role, from the user's attributes
 --         (GOVERNANCE_SCHEMA.USER_ATTRIBUTES), enforced by RLS_REGION_ATRIBUTO.
 --         Both policies apply together: analyst rows = RETAIL (role) AND user region.
--- Passwords: set ONLY in the worksheet (placeholders below). Idempotent.
--- If a password login asks for MFA: ALTER USER <u> SET TYPE = LEGACY_SERVICE;
+-- Credentials: this file creates users WITHOUT any password. Set each one out
+-- of band, never in this file or in chat (see section 2). Idempotent.
 -- =============================================================================
 USE ROLE ACCOUNTADMIN;
 USE WAREHOUSE WH_APP_MEDIUM;
@@ -56,14 +56,21 @@ WHERE NOT EXISTS (SELECT 1 FROM SUPERINTENDENCY_DEMO_DB.GOVERNANCE_SCHEMA.ROLE_M
 
 -- -----------------------------------------------------------------------------
 -- 2. Demo users (one per persona + two analysts for ABAC)
+-- No PASSWORD here, on purpose. A user created without a password cannot log
+-- in by password until one is set. An admin sets it OUT OF BAND, in a Snowsight
+-- worksheet or with a key pair, after this script runs:
+--   ALTER USER <USER_NAME> SET PASSWORD = '<generated in the worksheet>';
+--   -- or key pair: ALTER USER <USER_NAME> SET RSA_PUBLIC_KEY = '<public key body>';
+-- MUST_CHANGE_PASSWORD = TRUE forces a new password at first login.
+-- Never commit or paste a password or key into this repository.
 -- -----------------------------------------------------------------------------
-CREATE USER IF NOT EXISTS DEMO_CIENTISTA  PASSWORD = '<definir_na_hora>' MUST_CHANGE_PASSWORD = FALSE
+CREATE USER IF NOT EXISTS DEMO_CIENTISTA  MUST_CHANGE_PASSWORD = TRUE
   DEFAULT_ROLE = FR_DATA_SCIENTIST DEFAULT_WAREHOUSE = WH_TRANSFORM_LARGE COMMENT = 'PG-08 científico de datos';
-CREATE USER IF NOT EXISTS DEMO_AUDITOR    PASSWORD = '<definir_na_hora>' MUST_CHANGE_PASSWORD = FALSE
+CREATE USER IF NOT EXISTS DEMO_AUDITOR    MUST_CHANGE_PASSWORD = TRUE
   DEFAULT_ROLE = FR_AUDITOR DEFAULT_WAREHOUSE = WH_APP_MEDIUM COMMENT = 'PG-08 auditor';
-CREATE USER IF NOT EXISTS ANALISTA_NORTE  PASSWORD = '<definir_na_hora>' MUST_CHANGE_PASSWORD = FALSE
+CREATE USER IF NOT EXISTS ANALISTA_NORTE  MUST_CHANGE_PASSWORD = TRUE
   DEFAULT_ROLE = FR_BI_ANALYST DEFAULT_WAREHOUSE = WH_APP_MEDIUM COMMENT = 'C07 ABAC: analista con atributo REGION=NORTE';
-CREATE USER IF NOT EXISTS ANALISTA_SIN_REGION PASSWORD = '<definir_na_hora>' MUST_CHANGE_PASSWORD = FALSE
+CREATE USER IF NOT EXISTS ANALISTA_SIN_REGION MUST_CHANGE_PASSWORD = TRUE
   DEFAULT_ROLE = FR_BI_ANALYST DEFAULT_WAREHOUSE = WH_APP_MEDIUM COMMENT = 'C07 ABAC: mismo rol, SIN atributo REGION';
 GRANT ROLE FR_DATA_SCIENTIST TO USER DEMO_CIENTISTA;
 GRANT ROLE FR_AUDITOR        TO USER DEMO_AUDITOR;
@@ -155,7 +162,8 @@ FROM (SELECT * FROM VALUES ('PYME'), ('CORPORATIVO'), ('RETAIL') AS v(U)) u
 WHERE NOT EXISTS (SELECT 1 FROM SUPERINTENDENCY_DEMO_DB_DEV.GOVERNANCE_SCHEMA.ROLE_MAPPING m
                   WHERE m.ROLE_NAME = 'FR_DEV_ENGINEER' AND m.BUSINESS_UNIT = u.U);
 
-CREATE USER IF NOT EXISTS DEMO_DEV_ENGINEER PASSWORD = '<definir_na_hora>' MUST_CHANGE_PASSWORD = FALSE
+-- Password for DEMO_DEV_ENGINEER: set out of band (section 2 instructions).
+CREATE USER IF NOT EXISTS DEMO_DEV_ENGINEER MUST_CHANGE_PASSWORD = TRUE
   DEFAULT_ROLE = FR_DEV_ENGINEER DEFAULT_WAREHOUSE = WH_INGESTION_MEDIUM COMMENT = 'C07-AE-04 identidad de DEV';
 GRANT ROLE FR_DEV_ENGINEER TO USER DEMO_DEV_ENGINEER;
 
