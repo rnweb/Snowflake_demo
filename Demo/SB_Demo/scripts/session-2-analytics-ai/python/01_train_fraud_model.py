@@ -43,6 +43,7 @@ from snowflake.ml.modeling._internal import model_specifications as _model_speci
 from snowflake.ml.modeling.ensemble import RandomForestClassifier
 from snowflake.ml.registry import Registry
 from snowflake.snowpark import Session
+from snowflake.snowpark import functions as F
 
 # Workaround: Snowflake ML's sklearn model specification omits pyarrow from the
 # package list of the temporary training procedure, but the in-database python
@@ -68,6 +69,11 @@ MART = f"{DB}.CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS"
 REGISTRY_SCHEMA = "RISK_ANALYTICS_SCHEMA"
 MODEL_NAME = "DETECTOR_FRAUDES"
 MODEL_VERSION = "V1"
+# The new account mart has 50 000 000 rows: fitting a RandomForest on all of
+# them does not fit in a MEDIUM warehouse. Train on a fixed-size random sample
+# (default 500 000 rows, override with TRAIN_SAMPLE_ROWS). The sample is
+# materialised once (cache_result) so train/test and the metrics see the same rows.
+TRAIN_SAMPLE_ROWS = int(os.getenv("TRAIN_SAMPLE_ROWS", "500000"))
 
 FEATURE_COLS = [
     "MONTO",
@@ -103,7 +109,7 @@ SELECT
              AND CATEGORIA IN ('ELECTRONICA', 'VIAJES')       THEN 1
         ELSE 0
     END                                                       AS ES_FRAUDE
-FROM {MART}
+FROM {MART} SAMPLE ({TRAIN_SAMPLE_ROWS} ROWS)
 """
 
 MODEL_CALL_SQL = f"""
@@ -175,11 +181,16 @@ def main() -> int:
         ).collect()[0]
         print(f"[1/5] connected as {ctx[0]} on {ctx[1]}")
 
-        base_df = session.sql(TRAIN_SQL)
-        counts = session.sql(
-            f"SELECT COUNT(*), SUM(ES_FRAUDE) FROM ({TRAIN_SQL.rstrip()})"
+        # Materialise the sample once: SAMPLE is non-deterministic, so a lazy
+        # DataFrame would re-sample on every action (split, fit, metrics).
+        base_df = session.sql(TRAIN_SQL).cache_result()
+        counts = base_df.select(
+            F.count(F.lit(1)), F.sum(F.col(LABEL_COL))
         ).collect()[0]
-        print(f"[2/5] mart loaded: {counts[0]} rows, {counts[1]} proxy-fraud labels")
+        print(
+            f"[2/5] sample loaded: {counts[0]} rows of the mart "
+            f"(TRAIN_SAMPLE_ROWS={TRAIN_SAMPLE_ROWS}), {counts[1]} proxy-fraud labels"
+        )
 
         train_df, test_df = base_df.random_split([0.8, 0.2], seed=42)
 
