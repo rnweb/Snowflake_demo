@@ -48,15 +48,21 @@ DIVIDE (
 
 Em cada medida, preencha **Description** com o texto do `COMMENT` da semantic view.
 
-**A métrica em conflito (preparada para a demo):** num relatório separado, "do
-analista", crie uma medida local com o mesmo nome:
+**A métrica em conflito (preparada para a demo):** o mesmo rótulo "Ticket Promedio"
+com o significado da área Comercial (gasto aprovado por cliente):
 
 ```DAX
-Ticket Promedio (reporte) = AVERAGE ( VW_TRANSACCIONES_NEGOCIO[Monto] )   -- incluye rechazadas y pendientes
+Ticket Promedio (Comercial) =
+DIVIDE (
+    CALCULATE ( SUM ( VW_TRANSACCIONES_NEGOCIO[Monto] ), VW_TRANSACCIONES_NEGOCIO[Estado] = "APROBADA" ),
+    DISTINCTCOUNT ( VW_TRANSACCIONES_NEGOCIO[RUT Cliente] )   -- funciona sobre o RUT mascarado (pseudônimo determinístico)
+)
 ```
 
-Coloque as duas lado a lado por "Unidad de Negocio": os números diferem. A seção 5 do
-`06_capa_semantica_c04.sql` mostra a mesma diferença no Snowflake.
+Mostre as duas em **cartões lado a lado + tabela** por "Unidad de Negocio" (num gráfico
+de colunas a escala esconde a oficial). A seção 5 do `06_capa_semantica_c04.sql` mostra a
+mesma diferença no Snowflake (~72 000–75 600 vezes). Não use "média de todos os estados"
+como contraste: no dado sintético a diferença é de centavos.
 
 **Publicar e reutilizar (C04-AE-06):**
 1. Publique o modelo como `SB_Modelo_Riesgo_Oficial` no workspace de consumo.

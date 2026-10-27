@@ -139,26 +139,35 @@ SELECT * FROM SEMANTIC_VIEW(
 -- -----------------------------------------------------------------------------
 -- 5. DEMO — two conflicting definitions of the same metric (C04-PRE-04)
 -- -----------------------------------------------------------------------------
--- "Ticket Promedio" as an analyst would improvise it in a report (all states,
--- rejected included) vs. the official definition above. Same name, different
--- numbers: this is the duplicate the semantic layer prevents.
-WITH improvisada AS (
-    SELECT UNIDAD_NEGOCIO, ROUND(AVG(MONTO), 2) AS TICKET_PROMEDIO_REPORTE
-    FROM CREDIT_CARD_TRANSACTIONS GROUP BY 1
+-- Two areas, the same label "Ticket Promedio", two different meanings:
+--   Riesgo (OFFICIAL, semantic view): average amount per APPROVED transaction
+--   Comercial (improvised in a report): approved spend per CLIENT
+-- Note: averaging all states vs approved only is NOT a usable contrast here —
+-- the synthetic generator draws MONTO independently of ESTADO, so both averages
+-- differ by cents (verified 27/10: -13.68 / +6.36 / -0.04 on ~250k).
+USE ROLE FR_DATA_ENGINEER;      -- sees the three units
+WITH improvisada AS (   -- "Ticket Promedio" del área Comercial: gasto por cliente
+    SELECT UNIDAD_NEGOCIO,
+           ROUND(SUM(CASE WHEN ESTADO = 'APROBADA' THEN MONTO END)
+                 / COUNT(DISTINCT RUT), 2) AS TICKET_PROMEDIO_COMERCIAL
+    FROM CREDIT_CARD_TRANSACTIONS
+    GROUP BY 1
 ),
-oficial AS (
+oficial AS (            -- definición oficial (capa semántica): por transacción aprobada
     SELECT unidad_negocio AS UNIDAD_NEGOCIO, ROUND(ticket_promedio, 2) AS TICKET_PROMEDIO_OFICIAL
     FROM SEMANTIC_VIEW(SV_RIESGO_TARJETAS DIMENSIONS trx.unidad_negocio METRICS trx.ticket_promedio)
 )
 SELECT i.UNIDAD_NEGOCIO,
-       i.TICKET_PROMEDIO_REPORTE,
+       i.TICKET_PROMEDIO_COMERCIAL,
        o.TICKET_PROMEDIO_OFICIAL,
-       i.TICKET_PROMEDIO_REPORTE - o.TICKET_PROMEDIO_OFICIAL AS DIFERENCIA
+       ROUND(i.TICKET_PROMEDIO_COMERCIAL / o.TICKET_PROMEDIO_OFICIAL, 1) AS VECES_MAYOR
 FROM improvisada i JOIN oficial o USING (UNIDAD_NEGOCIO)
 ORDER BY 1;
--- Expected: the two columns differ for every unit. The official one is the
--- metric certified in Power BI (DAX "Ticket Promedio" = same formula) and the
--- only one documented in the semantic view.
+-- Verified 27/10 on the new account: official ~250 760 for every unit; the
+-- "Comercial" figure is ~72 000-75 600 times larger (600 synthetic clients
+-- concentrate 50 M transactions). Same name, incompatible numbers: this is the
+-- duplicate the semantic layer prevents. The official one is the metric
+-- certified in Power BI (DAX "Ticket Promedio" = same formula).
 
 -- -----------------------------------------------------------------------------
 -- 6. DEMO — governance is inherited (run as the analyst)
