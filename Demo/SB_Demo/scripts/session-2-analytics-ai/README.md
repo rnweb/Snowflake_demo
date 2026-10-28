@@ -76,8 +76,8 @@ From the repository root:
 ```
 
 Expected output (role `FR_DATA_ENGINEER`, warehouse `WH_APP_MEDIUM` — the
-MEDIUM default keeps costs bounded; override with `SNOWFLAKE_WAREHOUSE`,
-e.g. `WH_TRANSFORM_LARGE` for parallel training benches):
+MEDIUM default keeps costs bounded; override with `SNOWFLAKE_WAREHOUSE` only
+after a FinOps review; `WH_TRANSFORM_LARGE` is not used by this demo):
 
 ```
 [1/5] connected as FR_DATA_ENGINEER on WH_APP_MEDIUM
@@ -91,9 +91,15 @@ e.g. `WH_TRANSFORM_LARGE` for parallel training benches):
 > (`EVALUADOS=3651`, `ACCURACY=0.9310`, `RECALL=0.4404`, `PRECISION=0.7608`) come
 > from the original **18 000-row sample**. The same values are stored in the
 > V1 metadata of `DETECTOR_FRAUDES`, which does not record the training row
-> count. The mart now holds **50 000 000** rows (PG-06, 2026-10-21), so a retrain
-> on the full mart gives different metrics and a longer run. Present these
-> figures as the historical 18k baseline, or retrain first.
+> count. The mart now holds **50 000 000** rows (PG-06, 2026-10-21). The script
+> now trains on a fixed **500 000-row sample** of it (`TRAIN_SAMPLE_ROWS`), so
+> a rerun gives different metrics. Present the figures above as the historical
+> 18k baseline.
+>
+> **Registry:** `V1` is already registered and the script never overwrites it.
+> A rerun with the default version prints `NOT REGISTERED` and is evaluation only.
+> To register the sampled model, run with `MODEL_VERSION=V2` and update the app,
+> MCP server and these docs to `V2` (the app redeploy is human-gated).
 >
 > Execution model: the script runs client-side (your machine) but the model
 > fitting executes inside Snowflake on the warehouse (Snowpark pushdown).

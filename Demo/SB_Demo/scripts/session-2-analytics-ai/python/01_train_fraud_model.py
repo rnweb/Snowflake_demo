@@ -1,7 +1,9 @@
 """Session 2 — 01: Snowpark ML fraud detection model.
 
-Trains a RandomForest classifier on the dbt mart
-(SUPERINTENDENCY_DEMO_DB.CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS),
+Trains a RandomForest classifier on a fixed-size random SAMPLE of the dbt mart
+(SUPERINTENDENCY_DEMO_DB.CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS; default
+500 000 rows, TRAIN_SAMPLE_ROWS to change). The sample is materialised once so
+training, evaluation and metrics use the same rows,
 evaluates it and registers it in the Snowflake Model Registry
 (RISK_ANALYTICS_SCHEMA) so it can be invoked from SQL:
 
@@ -20,8 +22,13 @@ on this warehouse, the expensive WH_TRANSFORM_LARGE is reserved for workloads
 that actually need it (trial-credit guardrail).
 
 Dataset note: the metrics in the README and in the model's V1 metadata come from
-an 18 000-row sample. The mart currently holds 50 000 000 rows (PG-06), so a
-retrain on the full mart produces different metrics and a longer run.
+an 18 000-row sample. The mart currently holds 50 000 000 rows (PG-06); this
+script trains on a 500 000-row sample of it, so its metrics differ from V1.
+
+Registry note: the default version is V1, which already exists in the account.
+The script will NOT overwrite it. If V1 exists, it runs as evaluation only and
+says so loudly. To register the sampled model, set MODEL_VERSION=V2 and update
+the app / MCP / README references to the new version.
 
 Note on labels: the synthetic dataset has no real fraud outcomes, so the
 target ES_FRAUDE is a documented *proxy label* derived from business rules
@@ -54,6 +61,7 @@ from snowflake.ml.modeling._internal import model_specifications as _model_speci
 from snowflake.ml.modeling.ensemble import RandomForestClassifier
 from snowflake.ml.registry import Registry
 from snowflake.snowpark import Session
+from snowflake.snowpark import functions as F
 
 # Workaround: Snowflake ML's sklearn model specification omits pyarrow from the
 # package list of the temporary training procedure, but the in-database python
@@ -78,7 +86,12 @@ DB = "SUPERINTENDENCY_DEMO_DB"
 MART = f"{DB}.CORE_BANKING_SCHEMA.CREDIT_CARD_TRANSACTIONS"
 REGISTRY_SCHEMA = "RISK_ANALYTICS_SCHEMA"
 MODEL_NAME = "DETECTOR_FRAUDES"
-MODEL_VERSION = "V1"
+MODEL_VERSION = os.getenv("MODEL_VERSION", "V1")
+# The new account mart has 50 000 000 rows: fitting a RandomForest on all of
+# them does not fit in a MEDIUM warehouse. Train on a fixed-size random sample
+# (default 500 000 rows, override with TRAIN_SAMPLE_ROWS). The sample is
+# materialised once (cache_result) so train/test and the metrics see the same rows.
+TRAIN_SAMPLE_ROWS = int(os.getenv("TRAIN_SAMPLE_ROWS", "500000"))
 
 FEATURE_COLS = [
     "MONTO",
@@ -114,7 +127,7 @@ SELECT
              AND CATEGORIA IN ('ELECTRONICA', 'VIAJES')       THEN 1
         ELSE 0
     END                                                       AS ES_FRAUDE
-FROM {MART}
+FROM {MART} SAMPLE ({TRAIN_SAMPLE_ROWS} ROWS)
 """
 
 MODEL_CALL_SQL = f"""
@@ -178,6 +191,17 @@ def build_session() -> Session:
     ).create()
 
 
+def _existing_versions(session: Session) -> set:
+    """Version names already registered for MODEL_NAME (empty if none)."""
+    try:
+        rows = session.sql(
+            f"SHOW VERSIONS IN MODEL {DB}.{REGISTRY_SCHEMA}.{MODEL_NAME}"
+        ).collect()
+    except Exception:  # noqa: BLE001 - model does not exist yet
+        return set()
+    return {row["name"] for row in rows}
+
+
 def main() -> int:
     session = build_session()
     try:
@@ -186,11 +210,16 @@ def main() -> int:
         ).collect()[0]
         print(f"[1/5] connected as {ctx[0]} on {ctx[1]}")
 
-        base_df = session.sql(TRAIN_SQL)
-        counts = session.sql(
-            f"SELECT COUNT(*), SUM(ES_FRAUDE) FROM ({TRAIN_SQL.rstrip()})"
+        # Materialise the sample once: SAMPLE is non-deterministic, so a lazy
+        # DataFrame would re-sample on every action (split, fit, metrics).
+        base_df = session.sql(TRAIN_SQL).cache_result()
+        counts = base_df.select(
+            F.count(F.lit(1)), F.sum(F.col(LABEL_COL))
         ).collect()[0]
-        print(f"[2/5] mart loaded: {counts[0]} rows, {counts[1]} proxy-fraud labels")
+        print(
+            f"[2/5] sample loaded: {counts[0]} rows of the mart "
+            f"(TRAIN_SAMPLE_ROWS={TRAIN_SAMPLE_ROWS}), {counts[1]} proxy-fraud labels"
+        )
 
         train_df, test_df = base_df.random_split([0.8, 0.2], seed=42)
 
@@ -228,32 +257,44 @@ def main() -> int:
             f"ACCURACY={metrics[1]} RECALL={metrics[2]} PRECISION={metrics[3]}"
         )
 
-        registry = Registry(
-            session=session,
-            database_name=DB,
-            schema_name=REGISTRY_SCHEMA,
-        )
-        try:
-            registry.log_model(
-                model_name=MODEL_NAME,
-                version_name=MODEL_VERSION,
-                model=model,
-                metrics={
-                    "accuracy": float(metrics[1]),
-                    "recall": float(metrics[2]),
-                    "precision": float(metrics[3]),
-                },
-                comment=(
-                    "Detector de transacciones sospechosas (RandomForest) — "
-                    "etiqueta proxy ES_FRAUDE, datos sintéticos de la demo."
-                ),
+        existing = _existing_versions(session)
+        if MODEL_VERSION in existing:
+            # Never overwrite a registered version silently: the app, MCP and
+            # README all read V1. This run is evaluation only.
+            print(
+                f"[5/5] NOT REGISTERED: {MODEL_NAME} {MODEL_VERSION} already exists "
+                f"(versions: {sorted(existing)}). The registry is unchanged; the "
+                "metrics above are for THIS sampled run only. To register it, "
+                "rerun with MODEL_VERSION=V2 and update the references."
             )
-            print(f"[5/5] registered {DB}.{REGISTRY_SCHEMA}.{MODEL_NAME} ({MODEL_VERSION})")
-        except Exception:  # noqa: BLE001 - idempotent re-runs
-            import traceback
+        else:
+            registry = Registry(
+                session=session,
+                database_name=DB,
+                schema_name=REGISTRY_SCHEMA,
+            )
+            try:
+                registry.log_model(
+                    model_name=MODEL_NAME,
+                    version_name=MODEL_VERSION,
+                    model=model,
+                    metrics={
+                        "accuracy": float(metrics[1]),
+                        "recall": float(metrics[2]),
+                        "precision": float(metrics[3]),
+                    },
+                    comment=(
+                        "Detector de transacciones sospechosas (RandomForest) — "
+                        "etiqueta proxy ES_FRAUDE, datos sintéticos de la demo."
+                    ),
+                )
+                print(f"[5/5] registered {DB}.{REGISTRY_SCHEMA}.{MODEL_NAME} ({MODEL_VERSION})")
+            except Exception:  # noqa: BLE001
+                import traceback
 
-            traceback.print_exc()
-            print("[5/5] registration skipped (see traceback above)")
+                traceback.print_exc()
+                print("[5/5] registration FAILED (see traceback above)")
+                return 1
 
         print("\n--- SQL inference example (model is callable from SQL) ---")
         print(MODEL_CALL_SQL.strip())

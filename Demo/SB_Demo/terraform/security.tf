@@ -457,6 +457,32 @@ resource "snowflake_grant_privileges_to_account_role" "analyst_analytics_select_
   }
 }
 
+# Views in the analytics layer (dbt materializes analytics models as views, e.g.
+# VW_RESUMEN_UNIDAD_NEGOCIO). The TABLES grants above do not cover views, so the
+# BI analyst could not see them (found 27/10 from Power BI). RLS/masking still
+# apply: the view reads the governed fact and policies evaluate the caller.
+resource "snowflake_grant_privileges_to_account_role" "analyst_analytics_select_all_views" {
+  account_role_name = snowflake_account_role.analyst.name
+  privileges        = ["SELECT"]
+  on_schema_object {
+    all {
+      in_schema          = snowflake_schema.analytics.fully_qualified_name
+      object_type_plural = "VIEWS"
+    }
+  }
+}
+
+resource "snowflake_grant_privileges_to_account_role" "analyst_analytics_select_future_views" {
+  account_role_name = snowflake_account_role.analyst.name
+  privileges        = ["SELECT"]
+  on_schema_object {
+    future {
+      in_schema          = snowflake_schema.analytics.fully_qualified_name
+      object_type_plural = "VIEWS"
+    }
+  }
+}
+
 resource "snowflake_grant_privileges_to_account_role" "analyst_wh_cortex" {
   account_role_name = snowflake_account_role.analyst.name
   privileges        = ["USAGE"]
