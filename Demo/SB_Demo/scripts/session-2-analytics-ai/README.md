@@ -9,8 +9,10 @@ This session shows how the platform moves from *governed data* to
 1. **Snowpark ML** — RandomForest fraud detector trained on the dbt mart and
    registered in the Snowflake Model Registry (`DETECTOR_FRAUDES`, V1),
    callable from SQL
-2. **Cortex AI (español)** — `CORTEX.SUMMARIZE`, `CORTEX.TRANSLATE` and
-   `CORTEX.COMPLETE` over the transactional data (Spanish prompts/outputs)
+2. **Cortex AI (español)** — `AI_SUMMARIZE`, `AI_TRANSLATE`, `AI_COMPLETE`,
+   `AI_EMBED` and `AI_EXTRACT` over the transactional data (Spanish
+   prompts/outputs). The legacy `SNOWFLAKE.CORTEX.*` namespace is blocked on
+   new accounts (error 399270) and must not be used.
 3. **Streamlit (español)** — *Panel de Prevención de Fraude*: KPIs, charts,
    model-inference form and a Cortex text box (**deployment requires explicit
    human approval**; deployed 2026-10-15 via `sql/04_deploy_streamlit.sql`)
