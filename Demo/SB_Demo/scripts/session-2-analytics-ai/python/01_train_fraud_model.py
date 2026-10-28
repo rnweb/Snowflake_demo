@@ -7,10 +7,21 @@ evaluates it and registers it in the Snowflake Model Registry
 
     SELECT MODEL(<db>.<schema>.DETECTOR_FRAUDES, V1)!predict(<features>) FROM ...;
 
+Execution model: this script is a CLIENT-SIDE ORCHESTRATOR. It runs on your
+machine, connects to Snowflake, and issues the commands. The model FITTING runs
+INSIDE Snowflake (Snowpark pushdown compute): snowflake-ml-python builds a
+temporary stored procedure and the training executes on the warehouse. Data
+does not leave Snowflake for training; only the metrics and the registered
+model artifact are returned to the client.
+
 Role: FR_DATA_ENGINEER (override: SNOWFLAKE_ROLE)
-Warehouse: WH_APP_MEDIUM (override: SNOWFLAKE_WAREHOUSE) — training only moves
-the mart over the wire and fits client-side; the expensive WH_TRANSFORM_LARGE is
-reserved for workloads that actually need it (trial-credit guardrail).
+Warehouse: WH_APP_MEDIUM (override: SNOWFLAKE_WAREHOUSE). Because fitting runs
+on this warehouse, the expensive WH_TRANSFORM_LARGE is reserved for workloads
+that actually need it (trial-credit guardrail).
+
+Dataset note: the metrics in the README and in the model's V1 metadata come from
+an 18 000-row sample. The mart currently holds 50 000 000 rows (PG-06), so a
+retrain on the full mart produces different metrics and a longer run.
 
 Note on labels: the synthetic dataset has no real fraud outcomes, so the
 target ES_FRAUDE is a documented *proxy label* derived from business rules
