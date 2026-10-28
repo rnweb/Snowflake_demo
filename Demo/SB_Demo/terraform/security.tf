@@ -294,6 +294,16 @@ resource "snowflake_grant_privileges_to_account_role" "engineer_wh_app" {
   }
 }
 
+# Drift monitoring alert (session-2/05) runs on the audit X-Small warehouse.
+resource "snowflake_grant_privileges_to_account_role" "engineer_wh_audit" {
+  account_role_name = snowflake_account_role.engineer.name
+  privileges        = ["USAGE"]
+  on_account_object {
+    object_type = "WAREHOUSE"
+    object_name = snowflake_warehouse.audit_warehouse.name
+  }
+}
+
 resource "snowflake_grant_privileges_to_account_role" "engineer_native_app_usage" {
   account_role_name = snowflake_account_role.engineer.name
   privileges        = ["USAGE"]

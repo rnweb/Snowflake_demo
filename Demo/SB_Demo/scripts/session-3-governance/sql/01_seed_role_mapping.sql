@@ -16,7 +16,10 @@
 --   FR_BI_ANALYST    -> RETAIL only        (analyst persona)
 --   FR_DATA_ENGINEER -> PYME/CORPORATIVO/RETAIL (dbt + ML keep full access)
 --   FR_IDMC_INTEGRATION / FR_CATALOG_READER -> all units (IDMC CDI / CDGC)
+--   FR_EXTERNAL_READER -> PYME (C08); FR_DATA_SCIENTIST -> all units (PG-08)
+--   FR_TENANT_RIESGO -> all units, FR_TENANT_FRAUDE -> PYME (PG-17)
 --   FR_DEMO_ADMIN / ACCOUNTADMIN bypass the policy entirely (policy body).
+--   Re-seeding is now safe: every role used by the demo is listed here.
 -- =============================================================================
 
 -- -----------------------------------------------------------------------------
@@ -38,10 +41,21 @@ VALUES
     ('FR_IDMC_INTEGRATION', 'RETAIL', 'IDMC CDI — integración (acceso completo)'),
     ('FR_CATALOG_READER', 'PYME', 'IDMC CDGC — catálogo y perfilamiento'),
     ('FR_CATALOG_READER', 'CORPORATIVO', 'IDMC CDGC — catálogo y perfilamiento'),
-    ('FR_CATALOG_READER', 'RETAIL', 'IDMC CDGC — catálogo y perfilamiento');
+    ('FR_CATALOG_READER', 'RETAIL', 'IDMC CDGC — catálogo y perfilamiento'),
+    -- C08 external consumer via Data Marketplace (role from session-3/05, block 0)
+    ('FR_EXTERNAL_READER', 'PYME', 'External consumer via Data Marketplace'),
+    -- PG-08 data-scientist persona (session-3/07): full rows, masked PII
+    ('FR_DATA_SCIENTIST', 'PYME', 'Persona científica de datos — filas completas, PII enmascarada'),
+    ('FR_DATA_SCIENTIST', 'CORPORATIVO', 'Persona científica de datos — filas completas, PII enmascarada'),
+    ('FR_DATA_SCIENTIST', 'RETAIL', 'Persona científica de datos — filas completas, PII enmascarada'),
+    -- PG-17 tenants (session-5/01): Riesgo sees all units, Fraude only PYME
+    ('FR_TENANT_RIESGO', 'PYME', 'Tenant Riesgo (PG-17)'),
+    ('FR_TENANT_RIESGO', 'CORPORATIVO', 'Tenant Riesgo (PG-17)'),
+    ('FR_TENANT_RIESGO', 'RETAIL', 'Tenant Riesgo (PG-17)'),
+    ('FR_TENANT_FRAUDE', 'PYME', 'Tenant Fraude (PG-17)');
 
 -- -----------------------------------------------------------------------------
--- 2. Verify the seed (10 rows expected)
+-- 2. Verify the seed (18 rows expected)
 -- -----------------------------------------------------------------------------
 SELECT ROLE_NAME, BUSINESS_UNIT, DESCRIPTION
 FROM SUPERINTENDENCY_DEMO_DB.GOVERNANCE_SCHEMA.ROLE_MAPPING

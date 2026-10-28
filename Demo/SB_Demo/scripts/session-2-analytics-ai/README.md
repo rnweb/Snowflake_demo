@@ -9,8 +9,10 @@ This session shows how the platform moves from *governed data* to
 1. **Snowpark ML** — RandomForest fraud detector trained on the dbt mart and
    registered in the Snowflake Model Registry (`DETECTOR_FRAUDES`, V1),
    callable from SQL
-2. **Cortex AI (español)** — `CORTEX.SUMMARIZE`, `CORTEX.TRANSLATE` and
-   `CORTEX.COMPLETE` over the transactional data (Spanish prompts/outputs)
+2. **Cortex AI (español)** — `AI_SUMMARIZE`, `AI_TRANSLATE`, `AI_COMPLETE`,
+   `AI_EMBED` and `AI_EXTRACT` over the transactional data (Spanish
+   prompts/outputs). The legacy `SNOWFLAKE.CORTEX.*` namespace is blocked on
+   new accounts (error 399270) and must not be used.
 3. **Streamlit (español)** — *Panel de Prevención de Fraude*: KPIs, charts,
    model-inference form and a Cortex text box (**deployment requires explicit
    human approval**; deployed 2026-10-15 via `sql/04_deploy_streamlit.sql`)
@@ -85,9 +87,16 @@ e.g. `WH_TRANSFORM_LARGE` for parallel training benches):
 [5/5] registered SUPERINTENDENCY_DEMO_DB.RISK_ANALYTICS_SCHEMA.DETECTOR_FRAUDES (V1)
 ```
 
-> Transcript of the original 18 000-row training run (labels/eval as shown).
-> The mart holds **50 000 000** rows since PG-06 (2026-10-21) — retrain
-> `python/01_train_fraud_model.py` to refresh the evaluation set.
+> **Dataset caveat (read before presenting the metrics):** the numbers above
+> (`EVALUADOS=3651`, `ACCURACY=0.9310`, `RECALL=0.4404`, `PRECISION=0.7608`) come
+> from the original **18 000-row sample**. The same values are stored in the
+> V1 metadata of `DETECTOR_FRAUDES`, which does not record the training row
+> count. The mart now holds **50 000 000** rows (PG-06, 2026-10-21), so a retrain
+> on the full mart gives different metrics and a longer run. Present these
+> figures as the historical 18k baseline, or retrain first.
+>
+> Execution model: the script runs client-side (your machine) but the model
+> fitting executes inside Snowflake on the warehouse (Snowpark pushdown).
 
 --- SQL inference example (model is callable from SQL) ---
 SELECT MODEL(SUPERINTENDENCY_DEMO_DB.RISK_ANALYTICS_SCHEMA.DETECTOR_FRAUDES, V1)!predict(
