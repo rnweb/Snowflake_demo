@@ -18,8 +18,10 @@
 -- CALIBRATE :umbral in the rehearsal: run the three questions, look at
 -- SCORE_MAX, and set the threshold between the valid one and the off-topic one.
 -- =============================================================================
+-- FinOps: small warehouse. The RAG path is a handful of vector comparisons and
+-- one LLM call; WH_TRANSFORM_LARGE is not needed and is not allowed for demo scripts.
 USE ROLE FR_DATA_ENGINEER;
-USE WAREHOUSE WH_TRANSFORM_LARGE;
+USE WAREHOUSE WH_APP_MEDIUM;
 
 SET umbral = 0.55;
 
