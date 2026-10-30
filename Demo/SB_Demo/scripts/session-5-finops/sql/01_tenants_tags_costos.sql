@@ -185,6 +185,18 @@ SELECT COST_CENTER, AMBIENTE, PROYECTO, ROUND(SUM(CREDITOS_TOTAL), 3) AS CREDITO
 FROM SUPERINTENDENCY_DEMO_DB.GOVERNANCE_SCHEMA.VW_COSTO_POR_ETIQUETA
 GROUP BY 1, 2, 3 ORDER BY CREDITOS DESC;
 
+-- 5a. Does the showback view return rows? (verified 2026-10-29: 36 rows. Warehouses
+--     whose tags have not reached ACCOUNT_USAGE.TAG_REFERENCES yet show SIN_ETIQUETA.)
+SELECT COUNT(*) AS FILAS_COSTO FROM SUPERINTENDENCY_DEMO_DB.GOVERNANCE_SCHEMA.VW_COSTO_POR_ETIQUETA;
+
+-- 5b. ZERO-LATENCY credits alongside the showback view (run the two statements together,
+--     in this order). Quota, used and remaining credits per resource monitor.
+--     Verified 2026-10-29. Not a per-warehouse bill: it is the monitor's own counter.
+SHOW RESOURCE MONITORS;
+SELECT "name", "credit_quota", "used_credits", "remaining_credits", "frequency"
+FROM TABLE(RESULT_SCAN(LAST_QUERY_ID()))
+ORDER BY "name";
+
 -- -----------------------------------------------------------------------------
 -- 6. DEMO — tenant independence (C02-AE-09)
 --    Run the heavy load on tenant A with python/load_test.py --warehouse WH_TENANT_RIESGO

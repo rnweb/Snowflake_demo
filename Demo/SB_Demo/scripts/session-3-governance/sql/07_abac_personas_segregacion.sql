@@ -207,6 +207,20 @@ GRANT ROLE FR_DEV_ENGINEER TO USER DEMO_DEV_ENGINEER;
 -- -----------------------------------------------------------------------------
 SHOW GRANTS OF ROLE FR_DATA_SCIENTIST;
 SHOW GRANTS OF ROLE FR_AUDITOR;
+
+-- 5a. ZERO-LATENCY version (use this on stage). Run these TWO statements together,
+--     in this order, in one worksheet: RESULT_SCAN(LAST_QUERY_ID()) reads the output
+--     of the immediately preceding statement, so nothing may run between them.
+--     Verified 2026-10-29 as FR_DEMO_ADMIN (6 rows, no ACCOUNT_USAGE lag).
+SHOW USERS;
+SELECT "name", "default_role", "has_password", "disabled", "type"
+FROM TABLE(RESULT_SCAN(LAST_QUERY_ID()))
+WHERE "name" IN ('DEMO_ANALYST', 'DEMO_CIENTISTA', 'DEMO_AUDITOR', 'ANALISTA_NORTE',
+                 'ANALISTA_SIN_REGION', 'DEMO_DEV_ENGINEER')
+ORDER BY "name";
+-- has_password = false is expected for the new personas (set out of band, see section 2).
+
+-- 5b. ACCOUNT_USAGE version (optional; lags up to ~2 h for brand-new users).
 SELECT NAME, DEFAULT_ROLE, DISABLED, TYPE
 FROM SNOWFLAKE.ACCOUNT_USAGE.USERS
 WHERE DELETED_ON IS NULL
