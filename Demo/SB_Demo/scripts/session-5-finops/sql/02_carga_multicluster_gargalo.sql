@@ -36,6 +36,9 @@ CREATE RESOURCE MONITOR IF NOT EXISTS RM_CARGA_ELASTICA
 ALTER WAREHOUSE WH_CARGA_ELASTICA SET RESOURCE_MONITOR = RM_CARGA_ELASTICA;
 
 GRANT USAGE, OPERATE, MONITOR ON WAREHOUSE WH_CARGA_ELASTICA TO ROLE FR_DATA_ENGINEER;
+-- MODIFY is required for ALTER WAREHOUSE ... MAX_CLUSTER_COUNT (section 3). Without it the
+-- 'despues' phase fails with 003001 (verified 2026-10-29).
+GRANT MODIFY ON WAREHOUSE WH_CARGA_ELASTICA TO ROLE FR_DATA_ENGINEER;
 
 -- -----------------------------------------------------------------------------
 -- 2. Phase ANTES (single cluster): run from your PC
@@ -130,8 +133,11 @@ SELECT OPERATOR_ID, OPERATOR_TYPE,
 FROM TABLE(GET_QUERY_OPERATOR_STATS($Q_ANTES))
 ORDER BY PCT_TIEMPO DESC NULLS LAST
 LIMIT 5;
--- Expected (confirm in the Query Profile before presenting): the window/sort
--- operator spills to local storage on XSMALL.
+-- Measured 2026-10-29: the window query above did NOT spill on XSMALL (no spill
+-- bytes in operator stats). Its cost is compute time (WindowFunction and
+-- DynamicSecureView ~50 % each); elapsed was 6.3 s on XSMALL vs 3.0-4.7 s on
+-- MEDIUM. Do not present this query as a spill example. The spill was observed in
+-- the carga-antes queries (section 4 / ACCOUNT_USAGE.QUERY_HISTORY).
 
 -- 6c. Fix (MEDIUM): the IDENTICAL statement on a larger warehouse. Nothing else changes.
 --     WH_INGESTION_MEDIUM is a platform warehouse that FR_DATA_ENGINEER can use.

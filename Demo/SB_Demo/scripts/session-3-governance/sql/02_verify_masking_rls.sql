@@ -10,12 +10,15 @@
 -- Without the isolation the analyst section would silently inherit
 -- FR_DATA_ENGINEER's raw-layer privileges (STAGING_SCHEMA).
 --
--- Expected results:
---   FR_DEMO_ADMIN  -> RUT y NUMERO_TARJETA en claro, 3 unidades, 50 000 000 filas
+-- Expected results (live account, verified 2026-10-29):
+--   FR_DEMO_ADMIN  -> RUT y NUMERO_TARJETA en claro, 3 unidades, 50 000 006 filas:
+--                     CORPORATIVO 16 506 996 | PYME 17 523 213 | RETAIL 15 969 797
 --   FR_BI_ANALYST  -> RUT como pseudónimo determinista ***-**-<12 hex>
 --                     (mismo token que la dim → joins/filtros siguen casando),
---                     tarjeta '****-****-****-****', solo RETAIL (15 969 793 filas),
+--                     tarjeta '****-****-****-****', solo RETAIL (15 969 797 filas),
 --                     misma SQL sin cambios de app
+-- Note: PROD has 50 000 006 rows; the DEV clone has 50 000 000. The origin of the
+-- 6 extra PROD rows is not confirmed yet. Use the live numbers above on stage.
 -- Note: the RUT mask is deterministic, so WHERE RUT = '<token>' still matches
 -- for non-admin roles (predicates run on the post-policy value).
 -- =============================================================================

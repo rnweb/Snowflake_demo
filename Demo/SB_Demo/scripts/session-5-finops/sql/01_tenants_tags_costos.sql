@@ -175,6 +175,10 @@ LEFT JOIN TAGS t ON t.WAREHOUSE_NAME = m.WAREHOUSE_NAME
 WHERE m.START_TIME >= DATEADD('day', -30, CURRENT_DATE())
 GROUP BY 1, 2, 3, 4, 5;
 
+-- The presenter role (FR_DEMO_ADMIN) cannot see a view owned by ACCOUNTADMIN without
+-- this grant (verified 2026-10-29: the view was invisible to FR_DEMO_ADMIN).
+GRANT SELECT ON VIEW SUPERINTENDENCY_DEMO_DB.GOVERNANCE_SCHEMA.VW_COSTO_POR_ETIQUETA TO ROLE FR_DEMO_ADMIN;
+
 -- Showback by cost center (last 30 days) — prints a chargeback-ready table
 SELECT COST_CENTER, AMBIENTE, PROYECTO, ROUND(SUM(CREDITOS_TOTAL), 3) AS CREDITOS,
        ROUND(SUM(CREDITOS_TOTAL) * 3, 2) AS USD_ESTIMADO   -- trial list price ~USD 3/credit (Enterprise)

@@ -7,17 +7,23 @@ SQL in session-5/sql reads the before/after evidence from QUERY_HISTORY.
     pip install snowflake-connector-python
     python load_test.py --warehouse WH_CARGA_ELASTICA --sessions 16 --rounds 3 --tag carga-antes
 
-Credentials never come from the repo: SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER and
-SNOWFLAKE_ROLE from env vars (or prompt), password with a hidden prompt.
+Credentials never come from the repo. Authentication (same contract as the
+other session scripts):
+    required : SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER and one of
+               SNOWFLAKE_PRIVATE_KEY_PATH (.p8) / SNOWFLAKE_PRIVATE_KEY (PEM)  [key-pair, preferred]
+    fallback : SNOWFLAKE_PASSWORD, or a hidden prompt if no key is set
+    optional : SNOWFLAKE_ROLE (default FR_DATA_ENGINEER)
 """
 import argparse
 import getpass
 import os
 import statistics
+import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 
 import snowflake.connector
+from cryptography.hazmat.primitives import serialization
 
 QUERIES = [
     "SELECT UNIDAD_NEGOCIO, CATEGORIA, COUNT(*), SUM(MONTO), AVG(MONTO) "
@@ -57,9 +63,25 @@ def main():
     account = os.environ.get("SNOWFLAKE_ACCOUNT") or input("Account (ORG-CUENTA): ").strip()
     user = os.environ.get("SNOWFLAKE_USER") or input("Usuario: ").strip()
     role = os.environ.get("SNOWFLAKE_ROLE", "FR_DATA_ENGINEER")
-    password = os.environ.get("SNOWFLAKE_PASSWORD") or getpass.getpass(f"Password de {user} (oculta): ")
-    conn_args = dict(account=account, user=user, password=password, role=role,
-                     client_session_keep_alive=False)
+    conn_args = dict(account=account, user=user, role=role,
+                     client_session_keep_alive=False,
+                     disable_ocsp_checks=os.environ.get("SNOWFLAKE_DISABLE_OCSP", "true").lower()
+                     in {"1", "true", "yes"},
+                     login_timeout=30)
+
+    key_path = os.environ.get("SNOWFLAKE_PRIVATE_KEY_PATH")
+    key_pem = os.environ.get("SNOWFLAKE_PRIVATE_KEY")
+    if key_path or key_pem:
+        pem = open(key_path, "rb").read() if key_path else key_pem.encode()
+        conn_args["private_key"] = serialization.load_pem_private_key(pem, password=None).private_bytes(
+            serialization.Encoding.DER,
+            serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption(),
+        )
+        conn_args["authenticator"] = os.environ.get("SNOWFLAKE_AUTHENTICATOR", "SNOWFLAKE_JWT")
+    else:
+        conn_args["password"] = os.environ.get("SNOWFLAKE_PASSWORD") or getpass.getpass(
+            f"Password de {user} (oculta): ")
 
     print(f"{a.sessions} sesiones x {a.rounds} rondas en {a.warehouse} (tag={a.tag}) ...")
     t0 = time.perf_counter()
